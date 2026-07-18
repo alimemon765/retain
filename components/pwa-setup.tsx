@@ -8,7 +8,9 @@ export function PwaSetup() {
   const router = useRouter();
 
   useEffect(() => {
-    if ("serviceWorker" in navigator) {
+    // Dev assets aren't content-hashed, so the SW's cache-first strategy for
+    // /_next/static would serve stale files — register in production only.
+    if ("serviceWorker" in navigator && process.env.NODE_ENV === "production") {
       navigator.serviceWorker.register("/sw.js").catch(() => {});
     }
 

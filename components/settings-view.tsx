@@ -19,6 +19,25 @@ export function SettingsView({ vapidConfigured }: { vapidConfigured: boolean }) 
   const [state, setState] = useState<PushState>("loading");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<string | null>(null);
+
+  async function sendTest() {
+    setBusy(true);
+    setTestResult(null);
+    try {
+      const res = await fetch("/api/push/test", { method: "POST" });
+      const data = (await res.json()) as { sent?: number; error?: string };
+      setTestResult(
+        res.ok
+          ? `Sent to ${data.sent} device${data.sent === 1 ? "" : "s"} — check your notifications.`
+          : `Failed: ${data.error ?? res.status}`
+      );
+    } catch {
+      setTestResult("Failed to reach the server.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   useEffect(() => {
     async function check() {
@@ -124,16 +143,27 @@ export function SettingsView({ vapidConfigured }: { vapidConfigured: boolean }) 
           </button>
         )}
         {state === "subscribed" && (
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-good">Enabled on this device</span>
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-good">Enabled on this device</span>
+              <button
+                type="button"
+                onClick={unsubscribe}
+                disabled={busy}
+                className="text-sm text-muted underline"
+              >
+                disable
+              </button>
+            </div>
             <button
               type="button"
-              onClick={unsubscribe}
+              onClick={sendTest}
               disabled={busy}
-              className="text-sm text-muted underline"
+              className="self-start rounded-lg border border-edge px-4 py-2 text-sm disabled:opacity-50"
             >
-              disable
+              Send test notification
             </button>
+            {testResult && <p className="text-sm text-muted">{testResult}</p>}
           </div>
         )}
         {error && <p className="text-sm text-again">{error}</p>}

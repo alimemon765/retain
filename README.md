@@ -8,10 +8,19 @@ review. Single user, mobile-first PWA, dark theme.
 
 ```bash
 npm install
-npx prisma migrate dev   # creates prisma/dev.db
-npx prisma db seed       # optional dummy data
+npx prisma migrate deploy  # applies prisma/migrations to DATABASE_URL
+npx prisma db seed         # optional dummy data
 npm run dev
 ```
+
+The database is Postgres (Supabase in production). `.env` currently points at
+a local scratch instance; start it with:
+
+```bash
+$(brew --prefix postgresql@17)/bin/pg_ctl -D <pgdata-dir> -o "-p 54329" start
+```
+
+or just point `DATABASE_URL`/`DIRECT_URL` at Supabase for dev too.
 
 ## Test
 
@@ -21,7 +30,13 @@ npm test                 # Vitest — SM-2 + scheduler unit tests
 
 ## Environment (`.env`, see `.env.example`)
 
-- `DATABASE_URL` — SQLite file path.
+- `DATABASE_URL` — Supabase **pooled** connection (port 6543, with
+  `?pgbouncer=true&connection_limit=1`) — serverless functions exhaust the
+  direct connection limit fast.
+- `DIRECT_URL` — Supabase direct connection (port 5432), used only by
+  `prisma migrate`.
+- `APP_PIN` — single-user PIN lock (proxy.ts + 30-day cookie). Empty
+  disables the lock.
 - `NEXT_PUBLIC_VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` —
   web push; generate with `npx web-push generate-vapid-keys`.
 - `CRON_SECRET` — bearer token required by `/api/cron/daily`.
@@ -41,10 +56,16 @@ npm test                 # Vitest — SM-2 + scheduler unit tests
 - `app/api/cron/daily` — daily push ("N topics to revise"), scheduled by
   `vercel.json` at 01:30 UTC = 07:00 IST.
 
-## Deployment note
+## Deploying to Vercel
 
-SQLite lives on the local filesystem — that works on any persistent host but
-**not on Vercel's serverless filesystem**. Before deploying to Vercel, switch
-the Prisma datasource to Postgres (Supabase) — schema is portable, only
-`datasource` + `DATABASE_URL` change, plus converting the `source`/`status`/
-`rating` string columns to native enums if desired.
+1. Create a Supabase project (region `ap-south-1` is closest to IST), grab
+   both connection strings from Project Settings → Database.
+2. `DIRECT_URL=<direct> DATABASE_URL=<pooled> npx prisma migrate deploy`
+   (run once from your machine to create the tables).
+3. Push the repo to GitHub, import into Vercel, and set env vars:
+   `DATABASE_URL`, `DIRECT_URL`, `APP_PIN`, `CRON_SECRET`,
+   `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`.
+4. `vercel.json` registers the daily cron (01:30 UTC = 07:00 IST); Vercel
+   sends `CRON_SECRET` as the bearer token automatically.
+5. On your phone: open the URL → Add to Home Screen → Settings (gear on
+   Today) → Enable notifications → Send test notification.
