@@ -14,7 +14,12 @@ export default async function TodayPage() {
     <div className="flex flex-col gap-5">
       <header className="flex items-end justify-between">
         <div>
-          <h1 className="text-xl font-semibold">{format(now, "EEEE")}</h1>
+          <h1 className="text-xl font-semibold">
+            {format(now, "EEEE")}{" "}
+            <Link href="/settings" aria-label="Settings" className="text-sm text-muted">
+              ⚙
+            </Link>
+          </h1>
           <p className="text-sm text-muted">{format(now, "d MMMM yyyy")}</p>
         </div>
         <div className="text-right">

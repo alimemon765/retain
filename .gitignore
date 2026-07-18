@@ -42,3 +42,6 @@ next-env.d.ts
 
 # database
 prisma/dev.db*
+
+.env
+!.env.example

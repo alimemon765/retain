@@ -1,36 +1,50 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Retain
 
-## Getting Started
+Personal spaced-repetition study tracker. Log what you study, review what's due
+each day, rate yourself Again / Hard / Good / Easy, and SM-2 schedules the next
+review. Single user, mobile-first PWA, dark theme.
 
-First, run the development server:
+## Run
 
 ```bash
+npm install
+npx prisma migrate dev   # creates prisma/dev.db
+npx prisma db seed       # optional dummy data
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Test
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm test                 # Vitest — SM-2 + scheduler unit tests
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Environment (`.env`, see `.env.example`)
 
-## Learn More
+- `DATABASE_URL` — SQLite file path.
+- `NEXT_PUBLIC_VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` —
+  web push; generate with `npx web-push generate-vapid-keys`.
+- `CRON_SECRET` — bearer token required by `/api/cron/daily`.
 
-To learn more about Next.js, take a look at the following resources:
+## Structure
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- `lib/sm2.ts` — pure SM-2 rating → interval/ease logic (tested).
+- `lib/scheduler.ts` — load balancing (≤10 reviews/day, ±1-day shift) and
+  Exam Mode pull-forward (tested). Exam Mode is applied at **read time**: the
+  DB always holds pure SM-2 dates, so scheduling reverts automatically after
+  the exam.
+- `lib/queries.ts` — read layer for the screens.
+- `app/actions.ts` — server actions (create/review/CRUD).
+- `app/api/review` — same review path over HTTP, used by the offline outbox.
+- `lib/outbox.ts` + `public/sw.js` — offline: last good page snapshots are
+  cached; ratings made offline queue in IndexedDB and flush on reconnect.
+- `app/api/cron/daily` — daily push ("N topics to revise"), scheduled by
+  `vercel.json` at 01:30 UTC = 07:00 IST.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Deployment note
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+SQLite lives on the local filesystem — that works on any persistent host but
+**not on Vercel's serverless filesystem**. Before deploying to Vercel, switch
+the Prisma datasource to Postgres (Supabase) — schema is portable, only
+`datasource` + `DATABASE_URL` change, plus converting the `source`/`status`/
+`rating` string columns to native enums if desired.

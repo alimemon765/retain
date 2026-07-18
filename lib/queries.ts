@@ -2,7 +2,7 @@ import { differenceInCalendarDays } from "date-fns";
 import { prisma } from "./db";
 import { dayKey, dayPlus, localDay, today } from "./dates";
 import { applyExamMode } from "./scheduler";
-import type { Rating, Source, Status } from "./types";
+import type { Source, Status } from "./types";
 
 // Exam Mode is applied at read time: the DB keeps pure SM-2 dates and
 // `effectiveNextReview` is what the UI schedules against. Idempotent, and
