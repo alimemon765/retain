@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { BottomNav } from "@/components/bottom-nav";
+import { PwaSetup } from "@/components/pwa-setup";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -46,6 +47,7 @@ export default function RootLayout({
         <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col">
           <main className="flex-1 px-4 pb-24 pt-6">{children}</main>
           <BottomNav />
+          <PwaSetup />
         </div>
       </body>
     </html>

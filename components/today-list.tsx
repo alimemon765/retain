@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { differenceInCalendarDays, startOfDay } from "date-fns";
 import { submitReview } from "@/app/actions";
+import { enqueueReview } from "@/lib/outbox";
 import type { TopicWithDue } from "@/lib/queries";
 import type { Rating } from "@/lib/types";
 import { SubjectChip } from "./chip";
@@ -49,13 +50,25 @@ export function TodayList({
         setDoneCount((c) => c + 1);
       }, 350);
     } catch {
-      setLeaving((s) => {
-        const next = new Set(s);
-        next.delete(topic.id);
-        return next;
-      });
-      setToast("Failed to save review — try again");
-      setTimeout(() => setToast(null), 3000);
+      // Likely offline — queue the rating and remove the card optimistically;
+      // PwaSetup flushes the outbox when connectivity returns.
+      try {
+        await enqueueReview(topic.id, rating);
+        setToast("Offline — review queued");
+        setTimeout(() => setToast(null), 2500);
+        setTimeout(() => {
+          setTopics((ts) => ts.filter((t) => t.id !== topic.id));
+          setDoneCount((c) => c + 1);
+        }, 350);
+      } catch {
+        setLeaving((s) => {
+          const next = new Set(s);
+          next.delete(topic.id);
+          return next;
+        });
+        setToast("Failed to save review — try again");
+        setTimeout(() => setToast(null), 3000);
+      }
     }
   }
 
