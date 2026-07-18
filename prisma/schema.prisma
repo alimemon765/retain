@@ -1,0 +1,53 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Subject {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  color     String
+  examDate  DateTime?
+  topics    Topic[]
+  createdAt DateTime  @default(now())
+}
+
+model Topic {
+  id           String     @id @default(cuid())
+  subjectId    String
+  subject      Subject    @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  name         String
+  notes        String?
+  source       String     @default("SELF") // COLLEGE | SELF
+  dateStudied  DateTime
+  easeFactor   Float      @default(2.5)
+  intervalDays Int        @default(0)
+  repetitions  Int        @default(0)
+  nextReview   DateTime
+  status       String     @default("LEARNING") // LEARNING | REVIEWING | MASTERED | SUSPENDED
+  questions    Question[]
+  reviews      Review[]
+  createdAt    DateTime   @default(now())
+}
+
+model Question {
+  id      String  @id @default(cuid())
+  topicId String
+  topic   Topic   @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  text    String
+  answer  String?
+}
+
+model Review {
+  id             String   @id @default(cuid())
+  topicId        String
+  topic          Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  reviewedAt     DateTime @default(now())
+  rating         String // AGAIN | HARD | GOOD | EASY
+  intervalBefore Int
+  intervalAfter  Int
+}
