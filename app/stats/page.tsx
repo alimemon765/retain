@@ -5,7 +5,7 @@ import { dayKey, today } from "@/lib/dates";
 export const dynamic = "force-dynamic";
 
 function heatColor(count: number): string {
-  if (count === 0) return "var(--surface)";
+  if (count === 0) return "var(--surface-2)";
   if (count <= 2) return "#3d3524";
   if (count <= 5) return "#6e5c33";
   if (count <= 9) return "#a58a4b";
@@ -51,8 +51,15 @@ export default async function StatsPage() {
         <h2 className="text-[11px] font-medium uppercase tracking-wide text-muted">
           Review activity — last 6 months
         </h2>
-        <div className="overflow-x-auto rounded-xl border border-edge bg-surface p-3">
-          <div className="flex gap-[3px]" style={{ minWidth: "max-content" }}>
+        {/* rtl on the scroller starts it at the newest week; ltr restores order inside */}
+        <div
+          className="overflow-x-auto rounded-xl border border-edge bg-surface p-3"
+          style={{ direction: "rtl" }}
+        >
+          <div
+            className="flex gap-[3px]"
+            style={{ minWidth: "max-content", direction: "ltr" }}
+          >
             {weeks.map((week, wi) => (
               <div key={wi} className="flex flex-col gap-[3px]">
                 {week.map((d) => {
