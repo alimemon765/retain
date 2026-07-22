@@ -18,6 +18,21 @@ what's due → rate yourself → repeat.
 
 ---
 
+> **Phase 2:** Retain now tracks four domains — Study, DSA problems, Books,
+> and Skills. The nav is Today / Log / Calendar / **Progress** / **Library**:
+> - **Log** has four segments: Topic · Problem · Reading · Skill.
+> - **Today** adds DSA re-solves (old insight hidden until you Reveal — attempt
+>   it fresh, then rate Clean / Struggled / Hint / Looked up), a one-line
+>   reading nudge, and a quarterly skill-review banner every ~90 days.
+> - **Progress** (was Stats) has tabs per domain: review-load forecast,
+>   retention trend, pattern mastery (worst first — that's your study plan),
+>   a "Build me a practice set" button (5 problems, deliberately mixed
+>   patterns), reading pace, and a skills radar. Plus a cross-domain activity
+>   heatmap.
+> - **Library** (was Subjects) holds Subjects & Topics, Problems, Books
+>   (highlights on technical books have **Add to revision** — the idea enters
+>   your SM-2 queue), and Skills (levels change only in the quarterly review).
+
 ## The five screens
 
 ### 1. Today (home)
