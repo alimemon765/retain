@@ -34,6 +34,7 @@ model Topic {
   status       String     @default("LEARNING") // LEARNING | REVIEWING | MASTERED | SUSPENDED
   questions    Question[]
   reviews      Review[]
+  highlights   Highlight[] // book highlights promoted into this topic
   createdAt    DateTime   @default(now())
 }
 
@@ -61,4 +62,123 @@ model Review {
   rating         String // AGAIN | HARD | GOOD | EASY
   intervalBefore Int
   intervalAfter  Int
+}
+
+// ---------- Phase 2: DSA tracker (reuses lib/sm2.ts) ----------
+
+model Problem {
+  id           String           @id @default(cuid())
+  title        String
+  platform     String // LEETCODE | CODEFORCES | GFG | OTHER
+  externalId   String? // e.g. "two-sum" slug
+  url          String?
+  difficulty   String // EASY | MEDIUM | HARD
+  patterns     ProblemPattern[]
+  notes        String? // the key insight, in my own words
+  // SM-2 state — identical fields to Topic, reuses lib/sm2.ts
+  easeFactor   Float            @default(2.5)
+  intervalDays Int              @default(0)
+  repetitions  Int              @default(0)
+  nextReview   DateTime
+  status       String           @default("LEARNING") // LEARNING | REVIEWING | MASTERED | SUSPENDED
+  attempts     Attempt[]
+  firstSolved  DateTime
+  createdAt    DateTime         @default(now())
+}
+
+model Pattern {
+  id       String           @id @default(cuid())
+  name     String           @unique // "Sliding Window", "Monotonic Stack", ...
+  problems ProblemPattern[]
+}
+
+model ProblemPattern {
+  problemId String
+  patternId String
+  problem   Problem @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  pattern   Pattern @relation(fields: [patternId], references: [id], onDelete: Cascade)
+
+  @@id([problemId, patternId])
+}
+
+model Attempt {
+  id             String   @id @default(cuid())
+  problemId      String
+  problem        Problem  @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  attemptedAt    DateTime @default(now())
+  outcome        String // SOLVED_CLEAN | SOLVED_STRUGGLED | NEEDED_HINT | LOOKED_UP_SOLUTION
+  minutesTaken   Int?
+  intervalBefore Int
+  intervalAfter  Int
+}
+
+// ---------- Phase 2: Book reading tracker ----------
+
+model Book {
+  id         String           @id @default(cuid())
+  title      String
+  author     String
+  category   String // TECHNICAL | NONFICTION | FICTION
+  totalPages Int?
+  status     String           @default("READING") // WANT_TO_READ | READING | FINISHED | ABANDONED
+  startedAt  DateTime?
+  finishedAt DateTime?
+  rating     Int? // 1-5, set on finish
+  sessions   ReadingSession[]
+  highlights Highlight[]
+  createdAt  DateTime         @default(now())
+}
+
+model ReadingSession {
+  id      String   @id @default(cuid())
+  bookId  String
+  book    Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  date    DateTime
+  endPage Int // page I reached — pages read is derived from previous session
+  minutes Int?
+}
+
+model Highlight {
+  id      String  @id @default(cuid())
+  bookId  String
+  book    Book    @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  page    Int?
+  text    String
+  note    String?
+  // OPTIONAL LINK: promoted into a study Topic for spaced repetition.
+  topicId String?
+  topic   Topic?  @relation(fields: [topicId], references: [id], onDelete: SetNull)
+}
+
+// ---------- Phase 2: Personal tech skills ----------
+
+model Skill {
+  id          String          @id @default(cuid())
+  name        String // "React", "Prisma", "PyTorch", "Docker"
+  category    String // FRONTEND | BACKEND | ML | DEVOPS | LANGUAGE | OTHER
+  targetLevel Int // 1-5, where I want to be
+  nextAction  String? // ONE concrete next step
+  archived    Boolean         @default(false)
+  snapshots   SkillSnapshot[]
+  evidence    Evidence[]
+  createdAt   DateTime        @default(now())
+}
+
+model SkillSnapshot {
+  id      String   @id @default(cuid())
+  skillId String
+  skill   Skill    @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  level   Int // 1-5 self-assessment at this point in time
+  note    String?
+  takenAt DateTime @default(now())
+}
+
+model Evidence {
+  id      String   @id @default(cuid())
+  skillId String
+  skill   Skill    @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  kind    String // PROJECT | COURSE | BOOK | ARTICLE | PROBLEM_SET
+  label   String
+  url     String?
+  addedAt DateTime @default(now())
 }
