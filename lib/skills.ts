@@ -26,6 +26,19 @@ export function isQuarterlyReviewDue(
   return differenceInCalendarDays(now, latestSnapshotAt) >= REVIEW_INTERVAL_DAYS;
 }
 
+// Reference dark categorical order (validated set) — one slot per skill by
+// creation order, never re-cycled. Plain module so server components can use it.
+export const SKILL_SERIES = [
+  "#3987e5",
+  "#199e70",
+  "#c98500",
+  "#9085e9",
+  "#e66767",
+  "#d55181",
+  "#d95926",
+  "#008300",
+];
+
 export const SKILL_CATEGORY_COLORS: Record<string, string> = {
   FRONTEND: "#5aa7d6",
   BACKEND: "#6f9e6b",

@@ -1,7 +1,8 @@
 import { TabBar, type TabDef } from "@/components/tab-bar";
 import { StudyTab } from "@/components/progress/study-tab";
 import { DsaTab } from "@/components/progress/dsa-tab";
-import { ComingSoon } from "@/components/coming-soon";
+import { BooksTab } from "@/components/progress/books-tab";
+import { SkillsTab } from "@/components/progress/skills-tab";
 
 export const dynamic = "force-dynamic";
 
@@ -26,8 +27,8 @@ export default async function ProgressPage({
       <TabBar basePath="/progress" tabs={TABS} active={active} />
       {active === "study" && <StudyTab />}
       {active === "dsa" && <DsaTab />}
-      {active === "books" && <ComingSoon label="Books analytics" />}
-      {active === "skills" && <ComingSoon label="Skills analytics" />}
+      {active === "books" && <BooksTab />}
+      {active === "skills" && <SkillsTab />}
     </div>
   );
 }
