@@ -13,7 +13,7 @@ import {
 import type { Rating, Source } from "@/lib/types";
 
 function revalidateAll() {
-  for (const p of ["/", "/log", "/calendar", "/subjects", "/stats"]) {
+  for (const p of ["/", "/log", "/calendar", "/library", "/progress"]) {
     revalidatePath(p);
   }
 }

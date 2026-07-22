@@ -2,8 +2,6 @@ import { format, startOfWeek, addDays, addWeeks, isAfter } from "date-fns";
 import { getStatsData } from "@/lib/queries";
 import { dayKey, today } from "@/lib/dates";
 
-export const dynamic = "force-dynamic";
-
 function heatColor(count: number): string {
   if (count === 0) return "var(--surface-2)";
   if (count <= 2) return "#3d3524";
@@ -12,7 +10,7 @@ function heatColor(count: number): string {
   return "var(--accent)";
 }
 
-export default async function StatsPage() {
+export async function StudyTab() {
   const stats = await getStatsData();
   const now = today();
 
@@ -34,8 +32,6 @@ export default async function StatsPage() {
 
   return (
     <div className="flex flex-col gap-5">
-      <h1 className="text-xl font-semibold">Stats</h1>
-
       <div className="grid grid-cols-2 gap-2">
         {tiles.map((t) => (
           <div key={t.label} className="rounded-xl border border-edge bg-surface p-3.5">
