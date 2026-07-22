@@ -2,6 +2,7 @@ import { format } from "date-fns";
 import Link from "next/link";
 import { getTodayData } from "@/lib/queries";
 import { getDueProblems } from "@/lib/queries-dsa";
+import { getReadingNudges } from "@/lib/queries-books";
 import { prisma } from "@/lib/db";
 import { today } from "@/lib/dates";
 import { TodayList } from "@/components/today-list";
@@ -11,11 +12,12 @@ export const dynamic = "force-dynamic";
 
 export default async function TodayPage() {
   const now = today();
-  const [{ due, banners, reviewedToday, streak }, dueProblems, attemptsToday] =
+  const [{ due, banners, reviewedToday, streak }, dueProblems, attemptsToday, reading] =
     await Promise.all([
       getTodayData(),
       getDueProblems(),
       prisma.attempt.count({ where: { attemptedAt: { gte: now } } }),
+      getReadingNudges(),
     ]);
   // "Items reviewed today" spans the unified queue: topic reviews + DSA re-solves.
   const reviewedTotal = reviewedToday + attemptsToday;
@@ -74,6 +76,22 @@ export default async function TodayPage() {
           )}
           <DsaToday initialProblems={dueProblems} />
         </>
+      )}
+
+      {/* Passive reading nudge — one line, no guilt copy, no streak pressure. */}
+      {reading.length > 0 && (
+        <p className="text-sm text-muted">
+          Currently reading:{" "}
+          {reading.map((r, i) => (
+            <span key={r.bookId}>
+              {i > 0 && " · "}
+              <span className="text-foreground">{r.title}</span>
+              {" — page "}
+              {r.currentPage}
+              {r.totalPages ? `/${r.totalPages}` : ""}
+            </span>
+          ))}
+        </p>
       )}
 
       <Link

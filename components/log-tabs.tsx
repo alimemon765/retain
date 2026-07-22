@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { LogForm } from "./log-form";
 import { ProblemForm } from "./problem-form";
+import { ReadingForm, type ReadingBookOption } from "./reading-form";
 
 type Segment = "topic" | "problem" | "reading" | "skill";
 
@@ -26,9 +27,11 @@ interface PatternOption {
 export function LogTabs({
   subjects,
   patterns,
+  readingBooks,
 }: {
   subjects: SubjectOption[];
   patterns: PatternOption[];
+  readingBooks: ReadingBookOption[];
 }) {
   const [segment, setSegment] = useState<Segment>("topic");
 
@@ -53,11 +56,7 @@ export function LogTabs({
 
       {segment === "topic" && <LogForm subjects={subjects} />}
       {segment === "problem" && <ProblemForm patterns={patterns} />}
-      {segment === "reading" && (
-        <p className="rounded-xl border border-dashed border-edge bg-surface px-6 py-12 text-center text-sm text-muted">
-          Reading log coming soon.
-        </p>
-      )}
+      {segment === "reading" && <ReadingForm books={readingBooks} />}
       {segment === "skill" && (
         <p className="rounded-xl border border-dashed border-edge bg-surface px-6 py-12 text-center text-sm text-muted">
           Skill log coming soon.
