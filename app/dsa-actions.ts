@@ -133,6 +133,62 @@ export async function submitAttempt(
   return { intervalDays: next.intervalDays };
 }
 
+/** Build an interleaved 5-problem practice set (weak patterns + overdue first). */
+export async function getPracticeSet() {
+  const [problems, attempts] = await Promise.all([
+    prisma.problem.findMany({
+      where: { status: { not: "SUSPENDED" } },
+      include: {
+        patterns: { include: { pattern: { select: { name: true } } } },
+      },
+    }),
+    prisma.attempt.findMany({
+      select: {
+        outcome: true,
+        problem: {
+          select: {
+            patterns: { select: { pattern: { select: { name: true } } } },
+          },
+        },
+      },
+    }),
+  ]);
+
+  const { patternMastery } = await import("@/lib/analytics-dsa");
+  const { buildPracticeSet } = await import("@/lib/practice");
+
+  const mastery = patternMastery(
+    attempts.map((a) => ({
+      outcome: a.outcome,
+      patterns: a.problem.patterns.map((p) => p.pattern.name),
+    }))
+  );
+  const accuracy = new Map(mastery.map((m) => [m.pattern, m.unaidedPct]));
+
+  const set = buildPracticeSet({
+    candidates: problems.map((p) => ({
+      id: p.id,
+      title: p.title,
+      patterns: p.patterns.map((pp) => pp.pattern.name),
+      nextReview: p.nextReview,
+    })),
+    patternAccuracy: accuracy,
+    today: today(),
+  });
+
+  const byId = new Map(problems.map((p) => [p.id, p]));
+  return set.map((s) => {
+    const p = byId.get(s.id)!;
+    return {
+      id: p.id,
+      title: p.title,
+      url: p.url,
+      difficulty: p.difficulty,
+      patterns: s.patterns,
+    };
+  });
+}
+
 export async function deleteProblem(id: string) {
   await prisma.problem.delete({ where: { id } });
   revalidateAll();
