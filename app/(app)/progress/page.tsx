@@ -1,5 +1,6 @@
 import { TabBar, type TabDef } from "@/components/tab-bar";
 import { StudyTab } from "@/components/progress/study-tab";
+import { LandingHeatmap } from "@/components/progress/landing-heatmap";
 import { DsaTab } from "@/components/progress/dsa-tab";
 import { BooksTab } from "@/components/progress/books-tab";
 import { SkillsTab } from "@/components/progress/skills-tab";
@@ -25,6 +26,8 @@ export default async function ProgressPage({
     <div className="flex flex-col gap-5">
       <h1 className="text-xl font-semibold">Progress</h1>
       <TabBar basePath="/progress" tabs={TABS} active={active} />
+      {/* Cross-domain heatmap on the landing (default) view. */}
+      {active === "study" && <LandingHeatmap />}
       {active === "study" && <StudyTab />}
       {active === "dsa" && <DsaTab />}
       {active === "books" && <BooksTab />}
