@@ -1,6 +1,19 @@
 import { format, startOfWeek, addDays, addWeeks, isAfter } from "date-fns";
-import { getStatsData } from "@/lib/queries";
+import { getActiveTopics, getStatsData } from "@/lib/queries";
+import { prisma } from "@/lib/db";
 import { dayKey, today } from "@/lib/dates";
+import {
+  forecastLoad,
+  maturityTimeline,
+  subjectCoverage,
+  weeklyRetention,
+} from "@/lib/analytics";
+import {
+  CoverageChart,
+  LoadForecastChart,
+  MaturityChart,
+  RetentionChart,
+} from "./study-charts";
 
 function heatColor(count: number): string {
   if (count === 0) return "var(--surface-2)";
@@ -11,8 +24,42 @@ function heatColor(count: number): string {
 }
 
 export async function StudyTab() {
-  const stats = await getStatsData();
   const now = today();
+  const [stats, activeTopics, reviews, topicHistories, subjects] =
+    await Promise.all([
+      getStatsData(),
+      getActiveTopics(),
+      prisma.review.findMany({ select: { reviewedAt: true, rating: true } }),
+      prisma.topic.findMany({
+        where: { status: { not: "SUSPENDED" } },
+        select: {
+          createdAt: true,
+          reviews: {
+            orderBy: { reviewedAt: "asc" },
+            select: { reviewedAt: true, rating: true, intervalAfter: true },
+          },
+        },
+      }),
+      prisma.subject.findMany({
+        select: {
+          name: true,
+          color: true,
+          examDate: true,
+          topics: {
+            where: { status: { not: "SUSPENDED" } },
+            select: { repetitions: true },
+          },
+        },
+      }),
+    ]);
+
+  const forecast = forecastLoad(
+    activeTopics.map((t) => t.effectiveNextReview),
+    now
+  );
+  const retention = weeklyRetention(reviews, now);
+  const maturity = maturityTimeline(topicHistories, now);
+  const coverage = subjectCoverage(subjects, now);
 
   // 26 weeks of columns, GitHub style (Mon-start weeks).
   const firstWeek = startOfWeek(addWeeks(now, -25), { weekStartsOn: 1 });
@@ -42,6 +89,11 @@ export async function StudyTab() {
           </div>
         ))}
       </div>
+
+      <LoadForecastChart data={forecast} />
+      <RetentionChart data={retention} />
+      <MaturityChart data={maturity} />
+      <CoverageChart data={coverage} />
 
       <section className="flex flex-col gap-2">
         <h2 className="text-[11px] font-medium uppercase tracking-wide text-muted">
