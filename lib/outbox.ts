@@ -1,12 +1,15 @@
 "use client";
 
-import type { Rating } from "./types";
+import type { DsaOutcome, Rating } from "./types";
 
-// IndexedDB outbox for review ratings made offline. Entries are flushed to
-// /api/review when connectivity returns (see today-list.tsx).
+// IndexedDB outbox for actions made offline (topic reviews and DSA attempts).
+// Entries flush to /api/review and /api/attempt when connectivity returns
+// (see pwa-setup.tsx and the Today components).
 
 const DB_NAME = "retain-outbox";
-const STORE = "reviews";
+const STORE_REVIEWS = "reviews";
+const STORE_ATTEMPTS = "attempts";
+const DB_VERSION = 2;
 
 export interface QueuedReview {
   id?: number;
@@ -15,69 +18,123 @@ export interface QueuedReview {
   queuedAt: number;
 }
 
+export interface QueuedAttempt {
+  id?: number;
+  problemId: string;
+  outcome: DsaOutcome;
+  minutesTaken?: number;
+  queuedAt: number;
+}
+
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = () => {
-      req.result.createObjectStore(STORE, {
-        keyPath: "id",
-        autoIncrement: true,
-      });
+      const db = req.result;
+      if (!db.objectStoreNames.contains(STORE_REVIEWS)) {
+        db.createObjectStore(STORE_REVIEWS, { keyPath: "id", autoIncrement: true });
+      }
+      if (!db.objectStoreNames.contains(STORE_ATTEMPTS)) {
+        db.createObjectStore(STORE_ATTEMPTS, { keyPath: "id", autoIncrement: true });
+      }
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });
 }
 
-export async function enqueueReview(topicId: string, rating: Rating) {
-  const db = await openDb();
-  await new Promise<void>((resolve, reject) => {
-    const tx = db.transaction(STORE, "readwrite");
-    tx.objectStore(STORE).add({ topicId, rating, queuedAt: Date.now() });
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
-  db.close();
+function add(store: string, value: object): Promise<void> {
+  return openDb().then(
+    (db) =>
+      new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(store, "readwrite");
+        tx.objectStore(store).add({ ...value, queuedAt: Date.now() });
+        tx.oncomplete = () => {
+          db.close();
+          resolve();
+        };
+        tx.onerror = () => reject(tx.error);
+      })
+  );
 }
 
-async function takeAll(): Promise<QueuedReview[]> {
-  const db = await openDb();
-  const items = await new Promise<QueuedReview[]>((resolve, reject) => {
-    const req = db.transaction(STORE).objectStore(STORE).getAll();
-    req.onsuccess = () => resolve(req.result as QueuedReview[]);
-    req.onerror = () => reject(req.error);
-  });
-  db.close();
-  return items;
+function getAll<T>(store: string): Promise<T[]> {
+  return openDb().then(
+    (db) =>
+      new Promise<T[]>((resolve, reject) => {
+        const req = db.transaction(store).objectStore(store).getAll();
+        req.onsuccess = () => {
+          db.close();
+          resolve(req.result as T[]);
+        };
+        req.onerror = () => reject(req.error);
+      })
+  );
 }
 
-async function remove(id: number) {
-  const db = await openDb();
-  await new Promise<void>((resolve, reject) => {
-    const tx = db.transaction(STORE, "readwrite");
-    tx.objectStore(STORE).delete(id);
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
-  db.close();
+function remove(store: string, id: number): Promise<void> {
+  return openDb().then(
+    (db) =>
+      new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(store, "readwrite");
+        tx.objectStore(store).delete(id);
+        tx.oncomplete = () => {
+          db.close();
+          resolve();
+        };
+        tx.onerror = () => reject(tx.error);
+      })
+  );
 }
 
-/** Send queued reviews to the server. Returns how many were flushed. */
+export function enqueueReview(topicId: string, rating: Rating) {
+  return add(STORE_REVIEWS, { topicId, rating });
+}
+
+export function enqueueAttempt(
+  problemId: string,
+  outcome: DsaOutcome,
+  minutesTaken?: number
+) {
+  return add(STORE_ATTEMPTS, { problemId, outcome, minutesTaken });
+}
+
+/** Send all queued actions to the server. Returns how many were flushed. */
 export async function flushOutbox(): Promise<number> {
   let flushed = 0;
-  for (const item of await takeAll()) {
+
+  for (const item of await getAll<QueuedReview>(STORE_REVIEWS)) {
     const res = await fetch("/api/review", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ topicId: item.topicId, rating: item.rating }),
     });
-    // 404 = topic deleted meanwhile; drop the entry rather than retry forever.
+    // 404 = the row was deleted meanwhile; drop rather than retry forever.
     if (res.ok || res.status === 404) {
-      if (item.id !== undefined) await remove(item.id);
+      if (item.id !== undefined) await remove(STORE_REVIEWS, item.id);
       if (res.ok) flushed++;
     } else {
-      break; // server error — keep the rest queued and retry later
+      return flushed; // server error — keep the rest queued
     }
   }
+
+  for (const item of await getAll<QueuedAttempt>(STORE_ATTEMPTS)) {
+    const res = await fetch("/api/attempt", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        problemId: item.problemId,
+        outcome: item.outcome,
+        minutesTaken: item.minutesTaken,
+      }),
+    });
+    if (res.ok || res.status === 404) {
+      if (item.id !== undefined) await remove(STORE_ATTEMPTS, item.id);
+      if (res.ok) flushed++;
+    } else {
+      return flushed;
+    }
+  }
+
   return flushed;
 }

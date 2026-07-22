@@ -25,10 +25,14 @@ export function TodayList({
   initialTopics,
   reviewedToday,
   streak,
+  soleSection = true,
 }: {
   initialTopics: TopicWithDue[];
   reviewedToday: number;
   streak: number;
+  // When DSA re-solves also share the Today screen, the page owns the unified
+  // empty state — so this list should vanish rather than show its own card.
+  soleSection?: boolean;
 }) {
   const [topics, setTopics] = useState(initialTopics);
   const [leaving, setLeaving] = useState<Set<string>>(new Set());
@@ -85,6 +89,7 @@ export function TodayList({
   }
 
   if (topics.length === 0) {
+    if (!soleSection) return null;
     return (
       <div className="flex flex-col items-center gap-2 rounded-xl border border-edge bg-surface px-6 py-12 text-center">
         <p className="text-lg font-medium">All clear.</p>

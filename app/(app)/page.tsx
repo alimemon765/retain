@@ -1,14 +1,25 @@
 import { format } from "date-fns";
 import Link from "next/link";
 import { getTodayData } from "@/lib/queries";
+import { getDueProblems } from "@/lib/queries-dsa";
+import { prisma } from "@/lib/db";
 import { today } from "@/lib/dates";
 import { TodayList } from "@/components/today-list";
+import { DsaToday } from "@/components/dsa-today";
 
 export const dynamic = "force-dynamic";
 
 export default async function TodayPage() {
-  const { due, banners, reviewedToday, streak } = await getTodayData();
   const now = today();
+  const [{ due, banners, reviewedToday, streak }, dueProblems, attemptsToday] =
+    await Promise.all([
+      getTodayData(),
+      getDueProblems(),
+      prisma.attempt.count({ where: { attemptedAt: { gte: now } } }),
+    ]);
+  // "Items reviewed today" spans the unified queue: topic reviews + DSA re-solves.
+  const reviewedTotal = reviewedToday + attemptsToday;
+  const nothingDue = due.length === 0 && dueProblems.length === 0;
 
   return (
     <div className="flex flex-col gap-5">
@@ -43,7 +54,27 @@ export default async function TodayPage() {
         </div>
       ))}
 
-      <TodayList initialTopics={due} reviewedToday={reviewedToday} streak={streak} />
+      {nothingDue ? (
+        <div className="flex flex-col items-center gap-2 rounded-xl border border-edge bg-surface px-6 py-12 text-center">
+          <p className="text-lg font-medium">All clear.</p>
+          <p className="text-sm text-muted">
+            {reviewedTotal} {reviewedTotal === 1 ? "item" : "items"} reviewed today.
+          </p>
+          <p className="text-sm text-accent">{streak}-day streak</p>
+        </div>
+      ) : (
+        <>
+          {due.length > 0 && (
+            <TodayList
+              initialTopics={due}
+              reviewedToday={reviewedToday}
+              streak={streak}
+              soleSection={dueProblems.length === 0}
+            />
+          )}
+          <DsaToday initialProblems={dueProblems} />
+        </>
+      )}
 
       <Link
         href="/log"

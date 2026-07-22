@@ -1,5 +1,6 @@
 import { TabBar, type TabDef } from "@/components/tab-bar";
 import { SubjectsTab } from "@/components/library/subjects-tab";
+import { ProblemsTab } from "@/components/library/problems-tab";
 import { ComingSoon } from "@/components/coming-soon";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +25,7 @@ export default async function LibraryPage({
       <h1 className="text-xl font-semibold">Library</h1>
       <TabBar basePath="/library" tabs={TABS} active={active} />
       {active === "subjects" && <SubjectsTab />}
-      {active === "problems" && <ComingSoon label="Problems" />}
+      {active === "problems" && <ProblemsTab />}
       {active === "books" && <ComingSoon label="Books" />}
       {active === "skills" && <ComingSoon label="Skills" />}
     </div>
