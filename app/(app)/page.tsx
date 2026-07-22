@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getTodayData } from "@/lib/queries";
 import { getDueProblems } from "@/lib/queries-dsa";
 import { getReadingNudges } from "@/lib/queries-books";
+import { getSkillReviewDue } from "@/lib/queries-skills";
 import { prisma } from "@/lib/db";
 import { today } from "@/lib/dates";
 import { TodayList } from "@/components/today-list";
@@ -12,13 +13,19 @@ export const dynamic = "force-dynamic";
 
 export default async function TodayPage() {
   const now = today();
-  const [{ due, banners, reviewedToday, streak }, dueProblems, attemptsToday, reading] =
-    await Promise.all([
-      getTodayData(),
-      getDueProblems(),
-      prisma.attempt.count({ where: { attemptedAt: { gte: now } } }),
-      getReadingNudges(),
-    ]);
+  const [
+    { due, banners, reviewedToday, streak },
+    dueProblems,
+    attemptsToday,
+    reading,
+    skillReviewDue,
+  ] = await Promise.all([
+    getTodayData(),
+    getDueProblems(),
+    prisma.attempt.count({ where: { attemptedAt: { gte: now } } }),
+    getReadingNudges(),
+    getSkillReviewDue(),
+  ]);
   // "Items reviewed today" spans the unified queue: topic reviews + DSA re-solves.
   const reviewedTotal = reviewedToday + attemptsToday;
   const nothingDue = due.length === 0 && dueProblems.length === 0;
@@ -42,6 +49,17 @@ export default async function TodayPage() {
           </p>
         </div>
       </header>
+
+      {skillReviewDue && (
+        <Link
+          href="/skills-review"
+          className="rounded-lg border border-edge bg-surface px-4 py-3 text-sm"
+          style={{ borderLeft: "3px solid var(--accent)" }}
+        >
+          <span className="font-medium text-accent">Quarterly skill review</span>{" "}
+          is due — takes 5 minutes. →
+        </Link>
+      )}
 
       {banners.map((b) => (
         <div
