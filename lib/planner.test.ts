@@ -85,12 +85,60 @@ describe("fixed blocks", () => {
   });
 
   it("cover the whole day with no gaps", () => {
-    const { blocks } = run();
+    // Run with candidates: an under-filled work slot used to leave a hole.
+    const { blocks } = run({
+      candidates: [
+        candidate({ id: "short", estimateMins: 20, patterns: ["dp"] }),
+        candidate({
+          id: "rev",
+          source: "REVIEW_DUE",
+          kind: "REVISION",
+          demand: "MEDIUM",
+          estimateMins: 8,
+          topicId: "t1",
+        }),
+      ],
+    });
     const sorted = [...blocks].sort(
       (a, b) => toMinutes(a.startTime) - toMinutes(b.startTime)
     );
     expect(toMinutes(sorted[0].startTime)).toBe(0);
     expect(toMinutes(sorted[sorted.length - 1].endTime)).toBe(24 * 60);
+    for (let i = 1; i < sorted.length; i++) {
+      expect(toMinutes(sorted[i].startTime)).toBe(toMinutes(sorted[i - 1].endTime));
+    }
+  });
+
+  it("never mixes two kinds of work into one block", () => {
+    const { blocks } = run({
+      classSlots: [],
+      candidates: [
+        candidate({
+          id: "rev",
+          source: "REVIEW_DUE",
+          kind: "REVISION",
+          demand: "MEDIUM",
+          estimateMins: 8,
+          topicId: "t1",
+        }),
+        candidate({ id: "dsa", estimateMins: 20, patterns: ["dp"] }),
+        candidate({
+          id: "book",
+          source: "READING",
+          kind: "READING",
+          demand: "LOW",
+          estimateMins: 30,
+          bookId: "b1",
+        }),
+      ],
+    });
+    // A revision block carries topics only; a DSA block carries problems only.
+    for (const b of blocks.filter((x) => x.kind === "REVISION")) {
+      expect(b.problemIds).toHaveLength(0);
+    }
+    for (const b of blocks.filter((x) => x.kind === "DSA")) {
+      expect(b.topicIds).toHaveLength(0);
+    }
   });
 
   it("schedules sleep for the configured hours", () => {

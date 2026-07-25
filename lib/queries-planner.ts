@@ -72,6 +72,42 @@ export async function getClassSlots(): Promise<ClassSlotRow[]> {
   return rows.map((r) => ({ ...r, weekParity: r.weekParity as WeekParity }));
 }
 
+export interface PlannedBlockRow {
+  id: string;
+  startTime: string;
+  endTime: string;
+  kind: string;
+  title: string;
+  topicIds: string[];
+  problemIds: string[];
+  bookId: string | null;
+  skillId: string | null;
+  locked: boolean;
+  completed: boolean;
+  gcalEventId: string | null;
+}
+
+export async function getBlocksForDate(date: Date): Promise<PlannedBlockRow[]> {
+  const rows = await prisma.plannedBlock.findMany({
+    where: { date },
+    orderBy: { startTime: "asc" },
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    startTime: r.startTime,
+    endTime: r.endTime,
+    kind: r.kind,
+    title: r.title,
+    topicIds: r.topicIds,
+    problemIds: r.problemIds,
+    bookId: r.bookId,
+    skillId: r.skillId,
+    locked: r.locked,
+    completed: r.completed,
+    gcalEventId: r.gcalEventId,
+  }));
+}
+
 export async function getExceptions(from: Date, to: Date) {
   return prisma.calendarException.findMany({
     where: { date: { gte: from, lte: to } },

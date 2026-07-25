@@ -1,24 +1,71 @@
 import Link from "next/link";
-import { getClassSlots } from "@/lib/queries-planner";
+import { addDays, format } from "date-fns";
+import { localDay, today } from "@/lib/dates";
+import {
+  getBlocksForDate,
+  getClassSlots,
+  getPlannerSettings,
+} from "@/lib/queries-planner";
+import { DayView } from "@/components/planner/day-view";
 
 export const dynamic = "force-dynamic";
 
-export default async function PlannerPage() {
-  const slots = await getClassSlots();
+function isoOf(d: Date) {
+  return format(d, "yyyy-MM-dd");
+}
+
+export default async function PlannerPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ date?: string }>;
+}) {
+  const { date: dateParam } = await searchParams;
+  const date = dateParam
+    ? localDay(new Date(`${dateParam}T00:00:00`))
+    : today();
+  const iso = isoOf(date);
+
+  const [blocks, settings, slots] = await Promise.all([
+    getBlocksForDate(date),
+    getPlannerSettings(),
+    getClassSlots(),
+  ]);
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Plan</h1>
-        <Link href="/planner/setup" className="text-sm text-accent underline">
-          setup
-        </Link>
+        <div>
+          <h1 className="text-xl font-semibold">{format(date, "EEEE")}</h1>
+          <p className="text-sm text-muted">{format(date, "d MMMM")}</p>
+        </div>
+        <div className="flex items-center gap-3 text-sm">
+          <Link
+            href={`/planner?date=${isoOf(addDays(date, -1))}`}
+            aria-label="Previous day"
+            className="rounded-lg border border-edge px-2.5 py-1 text-muted"
+          >
+            ←
+          </Link>
+          <Link
+            href={`/planner?date=${isoOf(addDays(date, 1))}`}
+            aria-label="Next day"
+            className="rounded-lg border border-edge px-2.5 py-1 text-muted"
+          >
+            →
+          </Link>
+          <Link href="/planner/setup" className="text-accent underline">
+            setup
+          </Link>
+        </div>
       </div>
-      <p className="rounded-xl border border-dashed border-edge bg-surface px-6 py-12 text-center text-sm text-muted">
-        {slots.length === 0
-          ? "Add your timetable in setup to start planning days."
-          : `Timetable ready (${slots.length} classes). Day view lands next.`}
-      </p>
+
+      <DayView
+        dateISO={iso}
+        dateLabel={format(date, "EEEE")}
+        blocks={blocks}
+        focusMode={settings.focusMode}
+        hasTimetable={slots.length > 0}
+      />
     </div>
   );
 }

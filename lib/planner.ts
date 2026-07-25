@@ -574,6 +574,9 @@ function placeCandidates(
 
     for (const slot of slots) {
       if (slot.remaining < c.estimateMins) continue;
+      // One kind per block: a block titled "revision" must not quietly contain
+      // DSA problems, or its label and deep-link both lie.
+      if (slot.assigned.length > 0 && slot.assigned[0].kind !== c.kind) continue;
       // Never split one DSA problem across two blocks, and never let a block
       // stack up on a single pattern.
       if (
@@ -668,9 +671,18 @@ export function generatePlan(input: GeneratePlanInput): {
       slot.assigned.length === 1
         ? slot.assigned[0].title
         : `${slot.assigned.length} × ${kind.toLowerCase()}`;
+    // A block only claims the time it needs; the rest of the slot goes back
+    // as buffer so the day never has holes in it.
+    const blockEnd = Math.min(
+      slot.start + Math.max(used, settings.minBlockMinutes),
+      slot.end
+    );
+    if (blockEnd < slot.end) {
+      slack.push({ start: blockEnd, end: slot.end });
+    }
     blocks.push({
       startTime: fromMinutes(slot.start),
-      endTime: fromMinutes(slot.start + Math.max(used, settings.minBlockMinutes)),
+      endTime: fromMinutes(blockEnd),
       kind,
       title,
       topicIds: slot.assigned.flatMap(
@@ -683,7 +695,15 @@ export function generatePlan(input: GeneratePlanInput): {
     });
   }
 
-  for (const s of slack) {
+  // Merge touching slack so the timeline shows one "Buffer" row, not three.
+  const mergedSlack: Span[] = [];
+  for (const s of [...slack].sort((a, b) => a.start - b.start)) {
+    const last = mergedSlack[mergedSlack.length - 1];
+    if (last && s.start <= last.end) last.end = Math.max(last.end, s.end);
+    else mergedSlack.push({ ...s });
+  }
+  for (const s of mergedSlack) {
+    if (s.end <= s.start) continue;
     blocks.push({
       startTime: fromMinutes(s.start),
       endTime: fromMinutes(s.end),
