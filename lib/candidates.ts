@@ -155,8 +155,39 @@ export async function gatherCandidates(): Promise<Candidate[]> {
       demand: MANUAL_KIND_TO_DEMAND[kind] ?? "MEDIUM",
       daysOverdue: overdue,
       priority: t.priority,
+      taskId: t.id,
     });
   }
 
   return candidates;
+}
+
+/**
+ * Drop candidates that a locked or completed block already covers. Without
+ * this, re-optimizing a day duplicates work that is already placed.
+ */
+export function excludePlaced(
+  candidates: Candidate[],
+  placed: {
+    topicIds: string[];
+    problemIds: string[];
+    taskIds: string[];
+    bookId: string | null;
+    skillId: string | null;
+  }[]
+): Candidate[] {
+  const topics = new Set(placed.flatMap((b) => b.topicIds));
+  const problems = new Set(placed.flatMap((b) => b.problemIds));
+  const tasks = new Set(placed.flatMap((b) => b.taskIds));
+  const books = new Set(placed.map((b) => b.bookId).filter(Boolean));
+  const skills = new Set(placed.map((b) => b.skillId).filter(Boolean));
+
+  return candidates.filter((c) => {
+    if (c.topicId && topics.has(c.topicId)) return false;
+    if (c.problemId && problems.has(c.problemId)) return false;
+    if (c.taskId && tasks.has(c.taskId)) return false;
+    if (c.bookId && books.has(c.bookId)) return false;
+    if (c.skillId && skills.has(c.skillId)) return false;
+    return true;
+  });
 }

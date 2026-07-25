@@ -80,6 +80,7 @@ export interface PlannedBlockRow {
   title: string;
   topicIds: string[];
   problemIds: string[];
+  taskIds: string[];
   bookId: string | null;
   skillId: string | null;
   locked: boolean;
@@ -100,6 +101,7 @@ export async function getBlocksForDate(date: Date): Promise<PlannedBlockRow[]> {
     title: r.title,
     topicIds: r.topicIds,
     problemIds: r.problemIds,
+    taskIds: r.taskIds,
     bookId: r.bookId,
     skillId: r.skillId,
     locked: r.locked,

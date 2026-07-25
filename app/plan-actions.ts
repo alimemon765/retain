@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { localDay } from "@/lib/dates";
-import { gatherCandidates } from "@/lib/candidates";
+import { excludePlaced, gatherCandidates } from "@/lib/candidates";
 import {
   generatePlan,
   type PlannerBlock,
@@ -70,6 +70,7 @@ export async function previewPlan(
       title: b.title,
       topicIds: b.topicIds,
       problemIds: b.problemIds,
+      taskIds: b.taskIds,
       bookId: b.bookId ?? undefined,
       skillId: b.skillId ?? undefined,
       locked: true,
@@ -82,7 +83,11 @@ export async function previewPlan(
     settings: { ...settings, focusMode: focusMode ?? settings.focusMode },
     classSlots,
     exceptions,
-    candidates,
+    // Anything a locked/completed block already covers must not be re-planned.
+    candidates: excludePlaced(
+      candidates,
+      existing.filter((b) => b.locked || b.completed)
+    ),
     lockedBlocks,
   });
 
@@ -129,6 +134,7 @@ export async function applyPlan(dateISO: string, blocks: PlannerBlock[]) {
           title: b.title,
           topicIds: b.topicIds,
           problemIds: b.problemIds,
+          taskIds: b.taskIds,
           bookId: b.bookId ?? null,
           skillId: b.skillId ?? null,
           locked: b.locked,

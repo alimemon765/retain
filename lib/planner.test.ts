@@ -201,6 +201,7 @@ describe("locked blocks", () => {
           title: "Gym",
           topicIds: [],
           problemIds: [],
+          taskIds: [],
           locked: true,
           existingId: "gym-1",
         },
@@ -223,6 +224,7 @@ describe("locked blocks", () => {
       title: "Gym",
       topicIds: [],
       problemIds: [],
+      taskIds: [],
       locked: true,
     };
     const { blocks } = run({

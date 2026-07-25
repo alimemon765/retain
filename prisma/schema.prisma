@@ -240,6 +240,7 @@ model PlannedBlock {
   // Deep-link payload so a block can open the right Retain screen.
   topicIds    String[]  @default([])
   problemIds  String[]  @default([])
+  taskIds     String[]  @default([])
   bookId      String?
   skillId     String?
   locked      Boolean   @default(false) // manually placed — regeneration must not move it

@@ -85,6 +85,7 @@ export interface Candidate {
   problemId?: string;
   bookId?: string;
   skillId?: string;
+  taskId?: string;
 }
 
 export interface PlannerBlock {
@@ -94,6 +95,7 @@ export interface PlannerBlock {
   title: string;
   topicIds: string[];
   problemIds: string[];
+  taskIds: string[];
   bookId?: string;
   skillId?: string;
   locked: boolean;
@@ -646,6 +648,7 @@ export function generatePlan(input: GeneratePlanInput): {
       title: f.title,
       topicIds: [],
       problemIds: [],
+      taskIds: [],
       locked: f.locked,
       existingId: f.existingId,
     });
@@ -661,6 +664,7 @@ export function generatePlan(input: GeneratePlanInput): {
         title: "Free",
         topicIds: [],
         problemIds: [],
+        taskIds: [],
         locked: false,
       });
       continue;
@@ -689,6 +693,7 @@ export function generatePlan(input: GeneratePlanInput): {
         (c) => (c as Candidate & { topicIds?: string[] }).topicIds ?? (c.topicId ? [c.topicId] : [])
       ),
       problemIds: slot.assigned.flatMap((c) => (c.problemId ? [c.problemId] : [])),
+      taskIds: slot.assigned.flatMap((c) => (c.taskId ? [c.taskId] : [])),
       bookId: slot.assigned.find((c) => c.bookId)?.bookId,
       skillId: slot.assigned.find((c) => c.skillId)?.skillId,
       locked: false,
@@ -711,6 +716,7 @@ export function generatePlan(input: GeneratePlanInput): {
       title: "Buffer",
       topicIds: [],
       problemIds: [],
+      taskIds: [],
       locked: false,
     });
   }

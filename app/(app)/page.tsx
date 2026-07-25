@@ -6,8 +6,10 @@ import { getReadingNudges } from "@/lib/queries-books";
 import { getSkillReviewDue } from "@/lib/queries-skills";
 import { prisma } from "@/lib/db";
 import { today } from "@/lib/dates";
+import { getBlocksForDate } from "@/lib/queries-planner";
 import { TodayList } from "@/components/today-list";
 import { DsaToday } from "@/components/dsa-today";
+import { NowNext } from "@/components/planner/now-next";
 
 export const dynamic = "force-dynamic";
 
@@ -19,12 +21,14 @@ export default async function TodayPage() {
     attemptsToday,
     reading,
     skillReviewDue,
+    planBlocks,
   ] = await Promise.all([
     getTodayData(),
     getDueProblems(),
     prisma.attempt.count({ where: { attemptedAt: { gte: now } } }),
     getReadingNudges(),
     getSkillReviewDue(),
+    getBlocksForDate(now),
   ]);
   // "Items reviewed today" spans the unified queue: topic reviews + DSA re-solves.
   const reviewedTotal = reviewedToday + attemptsToday;
@@ -49,6 +53,8 @@ export default async function TodayPage() {
           </p>
         </div>
       </header>
+
+      <NowNext blocks={planBlocks} />
 
       {skillReviewDue && (
         <Link
