@@ -9,6 +9,8 @@ import {
 import { DayView } from "@/components/planner/day-view";
 import { WeekView } from "@/components/planner/week-view";
 import { OverflowStrip } from "@/components/planner/overflow-strip";
+import { TasksPanel } from "@/components/planner/tasks-panel";
+import { prisma } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -27,10 +29,14 @@ export default async function PlannerPage({
     : today();
   const iso = isoOf(date);
 
-  const [blocks, settings, slots] = await Promise.all([
+  const [blocks, settings, slots, tasks] = await Promise.all([
     getBlocksForDate(date),
     getPlannerSettings(),
     getClassSlots(),
+    prisma.manualTask.findMany({
+      where: { done: false },
+      orderBy: [{ priority: "asc" }, { createdAt: "asc" }],
+    }),
   ]);
 
   return (
@@ -72,6 +78,8 @@ export default async function PlannerPage({
       />
 
       {blocks.length > 0 && <OverflowStrip dateISO={iso} />}
+
+      <TasksPanel tasks={tasks} />
     </div>
   );
 }

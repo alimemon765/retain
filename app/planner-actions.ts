@@ -8,6 +8,7 @@ import { parseTimetable, type ParsedSlot } from "@/lib/timetable";
 import type {
   ExceptionKind,
   FocusMode,
+  ManualTaskKind,
   MealBlock,
   WeekParity,
 } from "@/lib/types";
@@ -159,5 +160,38 @@ export async function createException(input: {
 
 export async function deleteException(id: string) {
   await prisma.calendarException.delete({ where: { id } });
+  revalidatePlanner();
+}
+
+// ---------- Manual tasks ----------
+
+export async function createManualTask(input: {
+  title: string;
+  estimateMins: number;
+  kind: ManualTaskKind;
+  priority: number;
+  dueDate?: string;
+}) {
+  await prisma.manualTask.create({
+    data: {
+      title: input.title.trim(),
+      estimateMins: input.estimateMins,
+      kind: input.kind,
+      priority: input.priority,
+      dueDate: input.dueDate
+        ? localDay(new Date(`${input.dueDate}T00:00:00`))
+        : null,
+    },
+  });
+  revalidatePlanner();
+}
+
+export async function setManualTaskDone(id: string, done: boolean) {
+  await prisma.manualTask.update({ where: { id }, data: { done } });
+  revalidatePlanner();
+}
+
+export async function deleteManualTask(id: string) {
+  await prisma.manualTask.delete({ where: { id } });
   revalidatePlanner();
 }
