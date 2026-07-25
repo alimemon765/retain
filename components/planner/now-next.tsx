@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { setBlockCompleted } from "@/app/plan-actions";
 import { BLOCK_COLORS, isWorkKind } from "@/lib/block-style";
+import { enqueueBlockCompletion } from "@/lib/outbox";
 import { toMinutes } from "@/lib/timetable";
 import type { BlockKind } from "@/lib/types";
 import type { PlannedBlockRow } from "@/lib/queries-planner";
@@ -43,6 +44,9 @@ export function NowNext({ blocks }: { blocks: PlannedBlockRow[] }) {
     try {
       await setBlockCompleted(id, true);
       router.refresh();
+    } catch {
+      // Offline: queue it so the tick is not lost.
+      await enqueueBlockCompletion(id, true).catch(() => undefined);
     } finally {
       setBusy(false);
     }

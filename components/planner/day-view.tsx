@@ -14,6 +14,7 @@ import {
   type PlanPreview,
 } from "@/app/plan-actions";
 import { BLOCK_COLORS, blockHref, isWorkKind } from "@/lib/block-style";
+import { enqueueBlockCompletion } from "@/lib/outbox";
 import { fromMinutes, toMinutes } from "@/lib/timetable";
 import type { BlockKind, FocusMode } from "@/lib/types";
 import { FOCUS_MODES } from "@/lib/types";
@@ -332,6 +333,27 @@ function BlockCard({
     }
   }
 
+  /** Completing works offline: queue it and let the outbox sync later. */
+  async function toggleComplete() {
+    const next = !block.completed;
+    setBusy(true);
+    try {
+      await setBlockCompleted(block.id, next);
+      refresh();
+    } catch {
+      try {
+        await enqueueBlockCompletion(block.id, next);
+        setNote("Offline — saved, will sync");
+        setTimeout(() => setNote(null), 2500);
+      } catch {
+        setNote("Couldn't save that.");
+        setTimeout(() => setNote(null), 2500);
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
   // Slack rows stay visually quiet — they are the shape of the day, not tasks.
   if (!work) {
     return (
@@ -387,7 +409,7 @@ function BlockCard({
           type="button"
           aria-label={block.completed ? "Mark not done" : "Mark done"}
           disabled={busy}
-          onClick={() => act(() => setBlockCompleted(block.id, !block.completed))}
+          onClick={toggleComplete}
           className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-sm ${
             block.completed
               ? "border-good bg-good/20 text-good"

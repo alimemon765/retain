@@ -9,12 +9,20 @@ import type { DsaOutcome, Rating } from "./types";
 const DB_NAME = "retain-outbox";
 const STORE_REVIEWS = "reviews";
 const STORE_ATTEMPTS = "attempts";
-const DB_VERSION = 2;
+const STORE_BLOCKS = "blocks";
+const DB_VERSION = 3;
 
 export interface QueuedReview {
   id?: number;
   topicId: string;
   rating: Rating;
+  queuedAt: number;
+}
+
+export interface QueuedBlockDone {
+  id?: number;
+  blockId: string;
+  completed: boolean;
   queuedAt: number;
 }
 
@@ -36,6 +44,9 @@ function openDb(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(STORE_ATTEMPTS)) {
         db.createObjectStore(STORE_ATTEMPTS, { keyPath: "id", autoIncrement: true });
+      }
+      if (!db.objectStoreNames.contains(STORE_BLOCKS)) {
+        db.createObjectStore(STORE_BLOCKS, { keyPath: "id", autoIncrement: true });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -99,6 +110,10 @@ export function enqueueAttempt(
   return add(STORE_ATTEMPTS, { problemId, outcome, minutesTaken });
 }
 
+export function enqueueBlockCompletion(blockId: string, completed: boolean) {
+  return add(STORE_BLOCKS, { blockId, completed });
+}
+
 /** Send all queued actions to the server. Returns how many were flushed. */
 export async function flushOutbox(): Promise<number> {
   let flushed = 0;
@@ -130,6 +145,20 @@ export async function flushOutbox(): Promise<number> {
     });
     if (res.ok || res.status === 404) {
       if (item.id !== undefined) await remove(STORE_ATTEMPTS, item.id);
+      if (res.ok) flushed++;
+    } else {
+      return flushed;
+    }
+  }
+
+  for (const item of await getAll<QueuedBlockDone>(STORE_BLOCKS)) {
+    const res = await fetch("/api/block-complete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ blockId: item.blockId, completed: item.completed }),
+    });
+    if (res.ok || res.status === 404) {
+      if (item.id !== undefined) await remove(STORE_BLOCKS, item.id);
       if (res.ok) flushed++;
     } else {
       return flushed;

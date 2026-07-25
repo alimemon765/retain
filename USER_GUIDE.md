@@ -33,6 +33,24 @@ what's due → rate yourself → repeat.
 >   (highlights on technical books have **Add to revision** — the idea enters
 >   your SM-2 queue), and Skills (levels change only in the quarterly review).
 
+> **Phase 3 — the day planner.** A sixth tab, **Plan**, turns your timetable
+> plus everything that's due into an actual schedule.
+> - **Plan → setup**: paste your timetable (`Mon 9-10.30 DAA Lecture` —
+>   it's forgiving about format), set wake/sleep, commute, meals, block sizes
+>   and how much slack to leave.
+> - **Plan**: tap **Optimize my day**. You get a *preview* showing what would
+>   change and what wouldn't fit — nothing is saved until you confirm. Hard
+>   work lands in your peak hours, light work in the post-lunch dip, and only
+>   light revision before bed. Tick blocks off, lock ones you placed yourself
+>   (locked blocks survive re-optimizing), reschedule, or extend by 15m.
+> - **Focus modes** — Balanced / Exams / CP / Reading / Skills — bias the day
+>   toward one domain without abandoning the rest. Reviews are never dropped.
+> - **Today** gains a two-line **Now / Next** strip at the very top.
+> - **Google Calendar** is the delivery layer: connect it in Plan → setup and
+>   your blocks appear in a separate "Retain" calendar, which gives you a real
+>   home-screen widget and a notification at the start of every block. (A PWA
+>   can't do alarms or widgets itself — this is the way to get both.)
+
 ## The five screens
 
 ### 1. Today (home)
