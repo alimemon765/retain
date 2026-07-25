@@ -5,24 +5,27 @@ import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { disconnectCalendar, syncToCalendar } from "@/app/gcal-actions";
 import { updatePlannerSettings } from "@/app/planner-actions";
+import { gcalPanelState } from "@/lib/gcal";
 
 export function GcalPanel({
   connected,
   configured,
   syncClasses,
   lastSyncAt,
+  authExpired,
   status,
 }: {
   connected: boolean;
   configured: boolean;
   syncClasses: boolean;
   lastSyncAt: Date | null;
+  authExpired: boolean;
   status?: string;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
-  const [reconnect, setReconnect] = useState(false);
+  const [sessionExpired, setSessionExpired] = useState(false);
 
   async function sync() {
     setBusy(true);
@@ -30,12 +33,19 @@ export function GcalPanel({
     try {
       const r = await syncToCalendar();
       setNote(r.message);
-      setReconnect(Boolean(r.needsReconnect));
+      setSessionExpired(Boolean(r.needsReconnect));
       router.refresh();
     } finally {
       setBusy(false);
     }
   }
+
+  // Persisted expiry survives reloads; the session flag catches it immediately.
+  const state = gcalPanelState({
+    configured,
+    connected,
+    authExpired: authExpired || sessionExpired,
+  });
 
   const statusMessage: Record<string, string> = {
     connected: "Connected. Your plan will appear in the Retain calendar.",
@@ -68,18 +78,31 @@ export function GcalPanel({
         </p>
       )}
 
-      {!configured ? (
+      {state === "NOT_CONFIGURED" ? (
         <p className="text-sm text-again">
           Not configured — set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET and
           ENCRYPTION_KEY, then redeploy. See README.
         </p>
-      ) : !connected || reconnect ? (
+      ) : state === "DISCONNECTED" ? (
         <a
           href="/api/gcal/auth"
           className="self-start rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-background"
         >
-          {reconnect ? "Reconnect Google Calendar" : "Connect Google Calendar"}
+          Connect Google Calendar
         </a>
+      ) : state === "RECONNECT" ? (
+        <>
+          <p className="rounded-lg bg-again/10 px-3 py-2 text-xs text-again">
+            Google revoked access (the grant expired or was removed), so syncing
+            has stopped. Reconnecting fixes it — your plan is untouched.
+          </p>
+          <a
+            href="/api/gcal/auth"
+            className="self-start rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-background"
+          >
+            Reconnect Google Calendar
+          </a>
+        </>
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-3">

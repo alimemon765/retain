@@ -34,6 +34,7 @@ export default async function PlannerSetupPage({
         configured={gcalConfigured()}
         syncClasses={settings.gcalSyncClasses}
         lastSyncAt={settings.gcalLastSyncAt}
+        authExpired={settings.gcalAuthExpired}
         status={gcal}
       />
     </div>

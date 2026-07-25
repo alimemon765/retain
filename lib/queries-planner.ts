@@ -17,6 +17,7 @@ export interface PlannerSettingsRow {
   gcalConnected: boolean;
   gcalSyncClasses: boolean;
   gcalLastSyncAt: Date | null;
+  gcalAuthExpired: boolean;
 }
 
 const DEFAULT_MEALS: MealBlock[] = [
@@ -50,6 +51,7 @@ export async function getPlannerSettings(): Promise<PlannerSettingsRow> {
     gcalConnected: Boolean(row.gcalRefreshToken),
     gcalSyncClasses: row.gcalSyncClasses,
     gcalLastSyncAt: row.gcalLastSyncAt,
+    gcalAuthExpired: row.gcalAuthExpired,
   };
 }
 

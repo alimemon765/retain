@@ -27,6 +27,41 @@ export class GcalAuthExpired extends Error {
   }
 }
 
+/**
+ * Does this token-endpoint failure mean the grant is dead (reconnect needed),
+ * as opposed to a transient problem worth retrying? Pure so it can be tested
+ * without touching the network.
+ */
+export function isAuthExpiredResponse(
+  status: number,
+  body: { error?: string } | null
+): boolean {
+  // Google returns invalid_grant when the refresh token is revoked, expired,
+  // or the user removed app access. 401 means the access token was rejected.
+  if (body?.error === "invalid_grant") return true;
+  return status === 401;
+}
+
+export type GcalPanelState =
+  | "NOT_CONFIGURED"
+  | "DISCONNECTED"
+  | "RECONNECT"
+  | "CONNECTED";
+
+/** What the settings panel should show. Pure — drives the UI and its tests. */
+export function gcalPanelState(input: {
+  configured: boolean;
+  connected: boolean;
+  authExpired: boolean;
+}): GcalPanelState {
+  if (!input.configured) return "NOT_CONFIGURED";
+  if (!input.connected) return "DISCONNECTED";
+  // An expired grant is still "connected" in the DB, but useless until
+  // reauthorised — say reconnect, not a generic sync error.
+  if (input.authExpired) return "RECONNECT";
+  return "CONNECTED";
+}
+
 export function gcalConfigured(): boolean {
   return Boolean(
     process.env.GOOGLE_CLIENT_ID &&
@@ -98,9 +133,15 @@ async function accessToken(): Promise<string> {
   const data = (await res.json()) as TokenResponse;
   if (!res.ok || !data.access_token) {
     // A revoked or expired grant is a reconnect prompt, not a silent failure.
-    if (data.error === "invalid_grant") throw new GcalAuthExpired();
+    // Persist it so the panel still says "reconnect" after a page reload.
+    if (isAuthExpiredResponse(res.status, data)) {
+      await markAuthExpired(true);
+      throw new GcalAuthExpired();
+    }
     throw new Error(`Google token refresh failed: ${data.error ?? res.status}`);
   }
+  // A working refresh clears any previous expiry.
+  await markAuthExpired(false);
   return data.access_token;
 }
 
@@ -125,18 +166,34 @@ async function api<T>(
   return res.status === 204 ? (undefined as T) : ((await res.json()) as T);
 }
 
+async function markAuthExpired(expired: boolean) {
+  await prisma.plannerSettings
+    .update({
+      where: { id: "singleton" },
+      data: { gcalAuthExpired: expired },
+    })
+    .catch(() => undefined);
+}
+
 export async function saveRefreshToken(token: string) {
+  const encrypted = encryptSecret(token);
   await prisma.plannerSettings.upsert({
     where: { id: "singleton" },
-    create: { id: "singleton", gcalRefreshToken: encryptSecret(token) },
-    update: { gcalRefreshToken: encryptSecret(token) },
+    create: { id: "singleton", gcalRefreshToken: encrypted },
+    // Reconnecting clears the expired state.
+    update: { gcalRefreshToken: encrypted, gcalAuthExpired: false },
   });
 }
 
 export async function disconnect() {
   await prisma.plannerSettings.update({
     where: { id: "singleton" },
-    data: { gcalRefreshToken: null, gcalCalendarId: null, gcalLastSyncAt: null },
+    data: {
+      gcalRefreshToken: null,
+      gcalCalendarId: null,
+      gcalLastSyncAt: null,
+      gcalAuthExpired: false,
+    },
   });
   await prisma.plannedBlock.updateMany({ data: { gcalEventId: null } });
 }

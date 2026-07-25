@@ -100,8 +100,13 @@ Keep using your phone's real alarm clock to wake up.
    `https://<your-app>.vercel.app/api/gcal/callback`
    (add `http://localhost:3000/api/gcal/callback` too for local work).
 5. Set env vars: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `APP_URL`
-   (your deployed URL), and `ENCRYPTION_KEY` (`openssl rand -hex 32` — it
-   encrypts the refresh token at rest).
+   (your deployed URL), and `ENCRYPTION_KEY`.
+   `ENCRYPTION_KEY` **must be exactly 64 hex characters** (32 bytes for
+   AES-256) — generate it with `openssl rand -hex 32`. It is validated at
+   server startup by `instrumentation.ts`, so a malformed key fails the boot
+   with a clear message instead of erroring the first time you connect.
+   `APP_URL` must match the origin you registered above, because
+   `redirect_uri` is built from it and Google compares it exactly.
 6. In the app: **Plan → setup → Connect Google Calendar**.
 
 Retain creates and writes to a dedicated secondary calendar named **Retain**,

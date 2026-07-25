@@ -202,6 +202,8 @@ model PlannerSettings {
   gcalRefreshToken String? // encrypted at rest with ENCRYPTION_KEY
   gcalSyncClasses  Boolean  @default(true)
   gcalLastSyncAt   DateTime?
+  // Set when Google rejects the refresh token; drives the reconnect prompt.
+  gcalAuthExpired  Boolean  @default(false)
   updatedAt        DateTime @updatedAt
 }
 
