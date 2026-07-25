@@ -7,6 +7,8 @@ import {
   getPlannerSettings,
 } from "@/lib/queries-planner";
 import { DayView } from "@/components/planner/day-view";
+import { WeekView } from "@/components/planner/week-view";
+import { OverflowStrip } from "@/components/planner/overflow-strip";
 
 export const dynamic = "force-dynamic";
 
@@ -59,6 +61,8 @@ export default async function PlannerPage({
         </div>
       </div>
 
+      <WeekView date={date} />
+
       <DayView
         dateISO={iso}
         dateLabel={format(date, "EEEE")}
@@ -66,6 +70,8 @@ export default async function PlannerPage({
         focusMode={settings.focusMode}
         hasTimetable={slots.length > 0}
       />
+
+      {blocks.length > 0 && <OverflowStrip dateISO={iso} />}
     </div>
   );
 }

@@ -146,6 +146,39 @@ export async function applyPlan(dateISO: string, blocks: PlannerBlock[]) {
   return { count: blocks.length };
 }
 
+/**
+ * Work that today's plan does not cover. Recomputed rather than stored: due
+ * items are derived state, so a saved copy would go stale the moment I do one.
+ */
+export async function getOverflow(dateISO: string) {
+  const date = localDay(new Date(`${dateISO}T00:00:00`));
+  const [blocks, candidates] = await Promise.all([
+    getBlocksForDate(date),
+    gatherCandidates(),
+  ]);
+  const missed = excludePlaced(candidates, blocks);
+  return missed.map((c) => ({
+    id: c.id,
+    title: c.title,
+    kind: c.kind,
+    estimateMins: c.estimateMins,
+    // DECISION: only manual tasks can be "pushed" — SM-2 items are still due
+    // tomorrow by definition, so they reappear on their own.
+    taskId: c.taskId ?? null,
+  }));
+}
+
+/** Push a manual task's due date to tomorrow. */
+export async function pushTaskToTomorrow(taskId: string) {
+  const tomorrow = localDay(new Date());
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  await prisma.manualTask.update({
+    where: { id: taskId },
+    data: { dueDate: tomorrow },
+  });
+  revalidatePlanner();
+}
+
 // ---------- per-block controls ----------
 
 export async function setBlockCompleted(id: string, completed: boolean) {

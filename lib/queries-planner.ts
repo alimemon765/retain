@@ -110,6 +110,56 @@ export async function getBlocksForDate(date: Date): Promise<PlannedBlockRow[]> {
   }));
 }
 
+export interface WeekDaySummary {
+  iso: string;
+  minutesByKind: Record<string, number>;
+  workBlocks: number;
+  completed: number;
+  hasPlan: boolean;
+}
+
+/** Compressed per-day totals for the week grid. */
+export async function getWeekSummary(
+  from: Date,
+  to: Date
+): Promise<Map<string, WeekDaySummary>> {
+  const rows = await prisma.plannedBlock.findMany({
+    where: { date: { gte: from, lte: to } },
+    select: {
+      date: true,
+      kind: true,
+      startTime: true,
+      endTime: true,
+      completed: true,
+    },
+  });
+
+  const { dayKey } = await import("./dates");
+  const { toMinutes } = await import("./timetable");
+  const map = new Map<string, WeekDaySummary>();
+
+  for (const r of rows) {
+    const iso = dayKey(r.date);
+    const entry =
+      map.get(iso) ??
+      ({
+        iso,
+        minutesByKind: {},
+        workBlocks: 0,
+        completed: 0,
+        hasPlan: true,
+      } satisfies WeekDaySummary);
+    const mins = toMinutes(r.endTime) - toMinutes(r.startTime);
+    entry.minutesByKind[r.kind] = (entry.minutesByKind[r.kind] ?? 0) + mins;
+    if (["REVISION", "DSA", "READING", "SKILL", "CUSTOM"].includes(r.kind)) {
+      entry.workBlocks++;
+      if (r.completed) entry.completed++;
+    }
+    map.set(iso, entry);
+  }
+  return map;
+}
+
 export async function getExceptions(from: Date, to: Date) {
   return prisma.calendarException.findMany({
     where: { date: { gte: from, lte: to } },
