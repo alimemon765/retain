@@ -15,6 +15,7 @@ import {
   getExceptions,
   getPlannerSettings,
 } from "@/lib/queries-planner";
+import { deleteEvents } from "@/lib/gcal";
 import { fromMinutes, toMinutes } from "@/lib/timetable";
 import type { FocusMode } from "@/lib/types";
 
@@ -118,6 +119,14 @@ export async function applyPlan(dateISO: string, blocks: PlannerBlock[]) {
     blocks.map((b) => b.existingId).filter((id): id is string => Boolean(id))
   );
 
+  // Blocks about to be replaced must take their calendar events with them,
+  // otherwise Google keeps announcing work that is no longer planned.
+  const doomed = await prisma.plannedBlock.findMany({
+    where: { date, id: { notIn: [...keepIds] }, gcalEventId: { not: null } },
+    select: { gcalEventId: true },
+  });
+  await deleteEvents(doomed.map((d) => d.gcalEventId!));
+
   await prisma.$transaction([
     // Everything not carried over is replaced.
     prisma.plannedBlock.deleteMany({
@@ -195,6 +204,11 @@ export async function setBlockLocked(id: string, locked: boolean) {
 }
 
 export async function deleteBlock(id: string) {
+  const block = await prisma.plannedBlock.findUnique({
+    where: { id },
+    select: { gcalEventId: true },
+  });
+  if (block?.gcalEventId) await deleteEvents([block.gcalEventId]);
   await prisma.plannedBlock.delete({ where: { id } });
   revalidatePlanner();
 }
