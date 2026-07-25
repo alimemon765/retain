@@ -90,9 +90,13 @@ export function toMinutes(hhmm: string): number {
   return h * 60 + m;
 }
 
+/**
+ * Minutes back to HH:mm. End-of-day is "24:00", not "00:00" — a block that
+ * runs to midnight has to sort after one that starts at 23:00.
+ */
 export function fromMinutes(total: number): string {
   const clamped = Math.max(0, Math.min(total, 24 * 60));
-  const h = Math.floor(clamped / 60) % 24;
+  const h = Math.floor(clamped / 60);
   const m = clamped % 60;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }

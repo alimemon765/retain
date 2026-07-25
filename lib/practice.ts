@@ -13,6 +13,27 @@ export interface PracticeCandidate {
   /** 0–100 unaided accuracy per pattern, from patternMastery. */
 }
 
+export const MAX_PER_PATTERN = 2;
+
+/**
+ * Would adding these patterns push any one of them past the cap? Shared with
+ * the day planner so a single block interleaves the same way a practice set does.
+ */
+export function patternCapReached(
+  patterns: string[],
+  counts: Map<string, number>,
+  max: number = MAX_PER_PATTERN
+): boolean {
+  return patterns.some((p) => (counts.get(p) ?? 0) >= max);
+}
+
+export function countPatterns(
+  patterns: string[],
+  counts: Map<string, number>
+): void {
+  for (const p of patterns) counts.set(p, (counts.get(p) ?? 0) + 1);
+}
+
 export interface PracticeSetInput {
   candidates: PracticeCandidate[];
   /** pattern name → unaided % (lower = weaker). Missing = neutral 50. */
@@ -55,13 +76,11 @@ export function buildPracticeSet({
 
   for (const { c } of scored) {
     if (picked.length >= size) break;
-    if (c.patterns.some((p) => (perPattern.get(p) ?? 0) >= maxPerPattern)) {
+    if (patternCapReached(c.patterns, perPattern, maxPerPattern)) {
       continue; // would over-concentrate a pattern — skip to keep the mix
     }
     picked.push(c);
-    for (const p of c.patterns) {
-      perPattern.set(p, (perPattern.get(p) ?? 0) + 1);
-    }
+    countPatterns(c.patterns, perPattern);
   }
 
   return picked;
