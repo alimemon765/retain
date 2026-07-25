@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 
 const tabs = [
   { href: "/", label: "Today", icon: "◉" },
+  { href: "/planner", label: "Plan", icon: "◷" },
   { href: "/log", label: "Log", icon: "＋" },
   { href: "/calendar", label: "Calendar", icon: "▦" },
   { href: "/progress", label: "Progress", icon: "◫" },
@@ -23,7 +24,7 @@ export function BottomNav() {
             <Link
               key={t.href}
               href={t.href}
-              className={`flex min-w-16 flex-col items-center gap-0.5 py-2.5 text-[11px] ${
+              className={`flex min-w-0 flex-1 flex-col items-center gap-0.5 py-2.5 text-[10px] ${
                 active ? "text-accent" : "text-muted"
               }`}
             >
