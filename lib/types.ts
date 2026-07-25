@@ -44,3 +44,56 @@ export type EvidenceKind =
   | "BOOK"
   | "ARTICLE"
   | "PROBLEM_SET";
+
+// ---------- Phase 3 unions ----------
+export type FocusMode = "BALANCED" | "EXAMS" | "CP" | "READING" | "SKILLS";
+export const FOCUS_MODES: FocusMode[] = [
+  "BALANCED",
+  "EXAMS",
+  "CP",
+  "READING",
+  "SKILLS",
+];
+
+/** Fixed kinds are immovable; work kinds hold candidates; BREAK/BUFFER are slack. */
+export type BlockKind =
+  | "SLEEP"
+  | "GET_READY"
+  | "TRAVEL"
+  | "CLASS"
+  | "MEAL"
+  | "REVISION"
+  | "DSA"
+  | "READING"
+  | "SKILL"
+  | "CUSTOM"
+  | "BREAK"
+  | "BUFFER";
+
+export const WORK_KINDS: BlockKind[] = [
+  "REVISION",
+  "DSA",
+  "READING",
+  "SKILL",
+  "CUSTOM",
+];
+
+export type WeekParity = "EVERY" | "ODD" | "EVEN";
+export type ExceptionKind = "HOLIDAY" | "NO_COLLEGE" | "CUSTOM_BUSY" | "EXAM";
+export type ManualTaskKind = "DSA" | "READING" | "SKILL" | "STUDY" | "ADMIN";
+export const MANUAL_TASK_KINDS: ManualTaskKind[] = [
+  "DSA",
+  "READING",
+  "SKILL",
+  "STUDY",
+  "ADMIN",
+];
+
+/** How much focused thought a candidate needs — matched to time-of-day alertness. */
+export type Demand = "HIGH" | "MEDIUM" | "LOW";
+
+export interface MealBlock {
+  label: string;
+  start: string; // HH:mm
+  minutes: number;
+}

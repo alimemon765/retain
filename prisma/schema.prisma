@@ -182,3 +182,82 @@ model Evidence {
   url     String?
   addedAt DateTime @default(now())
 }
+
+// ---------- Phase 3: Day planner ----------
+
+model PlannerSettings {
+  id               String   @id @default("singleton")
+  wakeTime         String   @default("06:30") // local HH:mm
+  sleepHours       Float    @default(7.5)
+  preBufferMinutes Int      @default(60) // getting ready before leaving
+  travelMinutes    Int      @default(60) // each way
+  focusMode        String   @default("BALANCED") // BALANCED | EXAMS | CP | READING | SKILLS
+  minBlockMinutes  Int      @default(25)
+  maxBlockMinutes  Int      @default(90)
+  breakMinutes     Int      @default(10)
+  bufferPercent    Int      @default(20) // % of free time left deliberately unscheduled
+  mealBlocks       Json     @default("[]") // [{label,start,minutes}]
+  // Google Calendar is the output layer (widget + block-start notifications).
+  gcalCalendarId   String?
+  gcalRefreshToken String? // encrypted at rest with ENCRYPTION_KEY
+  gcalSyncClasses  Boolean  @default(true)
+  gcalLastSyncAt   DateTime?
+  updatedAt        DateTime @updatedAt
+}
+
+model ClassSlot {
+  id         String  @id @default(cuid())
+  dayOfWeek  Int // 0=Sun .. 6=Sat
+  startTime  String // "09:00"
+  endTime    String // "10:00"
+  label      String // "DAA Lecture", "IT Lab"
+  subjectId  String?
+  location   String?
+  weekParity String  @default("EVERY") // EVERY | ODD | EVEN
+  active     Boolean @default(true)
+
+  @@index([dayOfWeek])
+}
+
+model CalendarException {
+  id        String   @id @default(cuid())
+  date      DateTime // date-only
+  kind      String // HOLIDAY | NO_COLLEGE | CUSTOM_BUSY | EXAM
+  label     String
+  startTime String? // null = whole day
+  endTime   String?
+
+  @@index([date])
+}
+
+model PlannedBlock {
+  id          String    @id @default(cuid())
+  date        DateTime // date-only
+  startTime   String // "16:30"
+  endTime     String
+  kind        String // SLEEP | GET_READY | TRAVEL | CLASS | MEAL | REVISION | DSA | READING | SKILL | CUSTOM | BREAK | BUFFER
+  title       String
+  // Deep-link payload so a block can open the right Retain screen.
+  topicIds    String[]  @default([])
+  problemIds  String[]  @default([])
+  bookId      String?
+  skillId     String?
+  locked      Boolean   @default(false) // manually placed — regeneration must not move it
+  completed   Boolean   @default(false)
+  completedAt DateTime?
+  gcalEventId String?
+  createdAt   DateTime  @default(now())
+
+  @@index([date])
+}
+
+model ManualTask {
+  id           String    @id @default(cuid())
+  title        String
+  estimateMins Int
+  kind         String // DSA | READING | SKILL | STUDY | ADMIN
+  dueDate      DateTime?
+  priority     Int       @default(3) // 1 highest .. 5 lowest
+  done         Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+}
