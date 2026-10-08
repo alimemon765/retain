@@ -37,12 +37,13 @@ const MANUAL_KIND_TO_DEMAND: Record<ManualTaskKind, Candidate["demand"]> = {
   ADMIN: "LOW",
 };
 
-export async function gatherCandidates(): Promise<Candidate[]> {
-  const now = today();
+/** Everything due by `asOf` (default today) — future days plan against their own date. */
+export async function gatherCandidates(asOf: Date = today()): Promise<Candidate[]> {
+  const now = asOf;
   const [topics, dueProblems, newProblems, reading, skills, manualTasks] =
     await Promise.all([
       getActiveTopics(),
-      getDueProblems(),
+      getDueProblems(asOf),
       // Problems solved once but never re-solved are still worth revisiting.
       prisma.problem.findMany({
         where: { status: "LEARNING", nextReview: { gt: now } },
@@ -141,25 +142,54 @@ export async function gatherCandidates(): Promise<Candidate[]> {
   }
 
   // --- Manual tasks ---
-  for (const t of manualTasks) {
-    const kind = t.kind as ManualTaskKind;
-    const overdue = t.dueDate
-      ? Math.max(differenceInCalendarDays(now, localDay(t.dueDate)), 0)
-      : 0;
-    candidates.push({
-      id: `task:${t.id}`,
-      source: "MANUAL",
-      kind: MANUAL_KIND_TO_BLOCK[kind] ?? "CUSTOM",
-      title: t.title,
-      estimateMins: t.estimateMins,
-      demand: MANUAL_KIND_TO_DEMAND[kind] ?? "MEDIUM",
-      daysOverdue: overdue,
-      priority: t.priority,
-      taskId: t.id,
-    });
-  }
+  for (const t of manualTasks) candidates.push(toManualCandidate(t, now));
 
   return candidates;
+}
+
+export interface ManualTaskLike {
+  id: string;
+  title: string;
+  kind: string;
+  estimateMins: number;
+  priority: number;
+  dueDate: Date | null;
+}
+
+/** One manual task as a scheduler candidate. Shared with the AI assistant. */
+export function toManualCandidate(t: ManualTaskLike, asOf: Date): Candidate {
+  const kind = t.kind as ManualTaskKind;
+  const overdue = t.dueDate
+    ? Math.max(differenceInCalendarDays(asOf, localDay(t.dueDate)), 0)
+    : 0;
+  return {
+    id: `task:${t.id}`,
+    source: "MANUAL",
+    kind: MANUAL_KIND_TO_BLOCK[kind] ?? "CUSTOM",
+    title: t.title,
+    estimateMins: t.estimateMins,
+    demand: MANUAL_KIND_TO_DEMAND[kind] ?? "MEDIUM",
+    daysOverdue: overdue,
+    priority: t.priority,
+    taskId: t.id,
+  };
+}
+
+/**
+ * Manual tasks already placed on another upcoming day. Re-optimizing one day
+ * must not steal work the planner gave to a different day. Past days are
+ * ignored, so anything left unfinished rolls forward on its own.
+ */
+export function taskIdsPlacedOnOtherDays(
+  rows: readonly { iso: string; taskIds: readonly string[] }[],
+  targetIso: string,
+  todayIso: string
+): Set<string> {
+  return new Set(
+    rows
+      .filter((r) => r.iso !== targetIso && r.iso >= todayIso)
+      .flatMap((r) => r.taskIds)
+  );
 }
 
 /**

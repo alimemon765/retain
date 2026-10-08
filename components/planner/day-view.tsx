@@ -11,8 +11,8 @@ import {
   rescheduleBlock,
   setBlockCompleted,
   setBlockLocked,
-  type PlanPreview,
 } from "@/app/plan-actions";
+import type { PlanPreview } from "@/lib/day-plan";
 import { BLOCK_COLORS, blockHref, isWorkKind } from "@/lib/block-style";
 import { enqueueBlockCompletion } from "@/lib/outbox";
 import { fromMinutes, toMinutes } from "@/lib/timetable";

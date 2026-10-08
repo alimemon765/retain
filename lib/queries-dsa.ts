@@ -55,9 +55,9 @@ export async function getAllPatterns() {
   });
 }
 
-/** Problems due for a re-solve today (or overdue). */
-export async function getDueProblems(): Promise<ProblemCard[]> {
-  const now = today();
+/** Problems due for a re-solve by `asOf` (default today), including overdue. */
+export async function getDueProblems(asOf: Date = today()): Promise<ProblemCard[]> {
+  const now = asOf;
   const problems = await prisma.problem.findMany({
     where: { status: { not: "SUSPENDED" }, nextReview: { lte: now } },
     include: patternInclude,

@@ -4,39 +4,22 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { localDay } from "@/lib/dates";
 import { excludePlaced, gatherCandidates } from "@/lib/candidates";
+import type { PlannerBlock } from "@/lib/planner";
+import { getBlocksForDate } from "@/lib/queries-planner";
 import {
-  generatePlan,
-  type PlannerBlock,
-  type PlannerException,
-} from "@/lib/planner";
-import {
-  getBlocksForDate,
-  getClassSlots,
-  getExceptions,
-  getPlannerSettings,
-} from "@/lib/queries-planner";
+  buildDayPlan,
+  eventIdsToReplace,
+  placedElsewhere,
+  replaceDayBlocks,
+} from "@/lib/day-plan";
+import type { PlanPreview } from "@/lib/day-plan";
 import { deleteEvents } from "@/lib/gcal";
+import { setBlockCompletion } from "@/lib/block-completion";
 import { fromMinutes, toMinutes } from "@/lib/timetable";
 import type { FocusMode } from "@/lib/types";
 
 function revalidatePlanner() {
   for (const p of ["/", "/planner"]) revalidatePath(p);
-}
-
-export interface PlanPreview {
-  blocks: PlannerBlock[];
-  /** Human-readable diff against what is currently saved for that day. */
-  added: string[];
-  removed: string[];
-  kept: number;
-  overflow: { id: string; title: string; kind: string; estimateMins: number }[];
-  warnings: string[];
-  scheduledMinutes: number;
-  freeMinutes: number;
-}
-
-function signature(b: { startTime: string; endTime: string; title: string }) {
-  return `${b.startTime}-${b.endTime} ${b.title}`;
 }
 
 /** Run the scheduler for a date and diff it against the saved plan. Never writes. */
@@ -45,112 +28,17 @@ export async function previewPlan(
   focusMode?: FocusMode
 ): Promise<PlanPreview> {
   const date = localDay(new Date(`${dateISO}T00:00:00`));
-  const [settings, classSlots, exceptionRows, existing, candidates] =
-    await Promise.all([
-      getPlannerSettings(),
-      getClassSlots(),
-      getExceptions(date, date),
-      getBlocksForDate(date),
-      gatherCandidates(),
-    ]);
-
-  const exceptions: PlannerException[] = exceptionRows.map((e) => ({
-    kind: e.kind as PlannerException["kind"],
-    label: e.label,
-    startTime: e.startTime,
-    endTime: e.endTime,
-  }));
-
-  // Manual placements and anything already ticked off are preserved verbatim.
-  const lockedBlocks: PlannerBlock[] = existing
-    .filter((b) => b.locked || b.completed)
-    .map((b) => ({
-      startTime: b.startTime,
-      endTime: b.endTime,
-      kind: b.kind as PlannerBlock["kind"],
-      title: b.title,
-      topicIds: b.topicIds,
-      problemIds: b.problemIds,
-      taskIds: b.taskIds,
-      bookId: b.bookId ?? undefined,
-      skillId: b.skillId ?? undefined,
-      locked: true,
-      completed: b.completed,
-      existingId: b.id,
-    }));
-
-  const { blocks, summary } = generatePlan({
-    date,
-    settings: { ...settings, focusMode: focusMode ?? settings.focusMode },
-    classSlots,
-    exceptions,
-    // Anything a locked/completed block already covers must not be re-planned.
-    candidates: excludePlaced(
-      candidates,
-      existing.filter((b) => b.locked || b.completed)
-    ),
-    lockedBlocks,
-  });
-
-  const before = new Set(existing.map(signature));
-  const after = new Set(blocks.map(signature));
-
-  return {
-    blocks,
-    added: blocks.filter((b) => !before.has(signature(b))).map(signature),
-    removed: existing.filter((b) => !after.has(signature(b))).map(signature),
-    kept: blocks.filter((b) => before.has(signature(b))).length,
-    overflow: summary.overflow.map((c) => ({
-      id: c.id,
-      title: c.title,
-      kind: c.kind,
-      estimateMins: c.estimateMins,
-    })),
-    warnings: summary.warnings,
-    scheduledMinutes: summary.scheduledMinutes,
-    freeMinutes: summary.freeMinutes,
-  };
+  const { preview } = await buildDayPlan(date, { focusMode });
+  return preview;
 }
 
 /** Commit a previewed plan, preserving locked/completed rows and their gcal ids. */
 export async function applyPlan(dateISO: string, blocks: PlannerBlock[]) {
   const date = localDay(new Date(`${dateISO}T00:00:00`));
-  const keepIds = new Set(
-    blocks.map((b) => b.existingId).filter((id): id is string => Boolean(id))
-  );
-
-  // Blocks about to be replaced must take their calendar events with them,
-  // otherwise Google keeps announcing work that is no longer planned.
-  const doomed = await prisma.plannedBlock.findMany({
-    where: { date, id: { notIn: [...keepIds] }, gcalEventId: { not: null } },
-    select: { gcalEventId: true },
-  });
-  await deleteEvents(doomed.map((d) => d.gcalEventId!));
-
-  await prisma.$transaction([
-    // Everything not carried over is replaced.
-    prisma.plannedBlock.deleteMany({
-      where: { date, id: { notIn: [...keepIds] } },
-    }),
-    prisma.plannedBlock.createMany({
-      data: blocks
-        .filter((b) => !b.existingId)
-        .map((b) => ({
-          date,
-          startTime: b.startTime,
-          endTime: b.endTime,
-          kind: b.kind,
-          title: b.title,
-          topicIds: b.topicIds,
-          problemIds: b.problemIds,
-          taskIds: b.taskIds,
-          bookId: b.bookId ?? null,
-          skillId: b.skillId ?? null,
-          locked: b.locked,
-        })),
-    }),
-  ]);
-
+  // Replaced blocks take their calendar events with them, otherwise Google
+  // keeps announcing work that is no longer planned.
+  await deleteEvents(await eventIdsToReplace(date, blocks));
+  await prisma.$transaction((tx) => replaceDayBlocks(tx, date, blocks));
   revalidatePlanner();
   return { count: blocks.length };
 }
@@ -161,11 +49,15 @@ export async function applyPlan(dateISO: string, blocks: PlannerBlock[]) {
  */
 export async function getOverflow(dateISO: string) {
   const date = localDay(new Date(`${dateISO}T00:00:00`));
-  const [blocks, candidates] = await Promise.all([
+  const [blocks, candidates, elsewhere] = await Promise.all([
     getBlocksForDate(date),
-    gatherCandidates(),
+    gatherCandidates(date),
+    placedElsewhere(date),
   ]);
-  const missed = excludePlaced(candidates, blocks);
+  // Work already booked on another day is planned, not missing.
+  const missed = excludePlaced(candidates, blocks).filter(
+    (c) => !c.taskId || !elsewhere.has(c.taskId)
+  );
   return missed.map((c) => ({
     id: c.id,
     title: c.title,
@@ -191,10 +83,7 @@ export async function pushTaskToTomorrow(taskId: string) {
 // ---------- per-block controls ----------
 
 export async function setBlockCompleted(id: string, completed: boolean) {
-  await prisma.plannedBlock.update({
-    where: { id },
-    data: { completed, completedAt: completed ? new Date() : null },
-  });
+  await setBlockCompletion(id, completed);
   revalidatePlanner();
 }
 
