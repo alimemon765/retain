@@ -182,6 +182,15 @@ export function examProximityMultiplier(daysToExam?: number | null): number {
   return 1 + (21 - daysToExam) / 21;
 }
 
+/**
+ * A real spaced-repetition review — not just anything that lands in a
+ * REVISION block. Study tasks share that block kind, but they keep their own
+ * duration and task link, so they must never be batched as 4-minute reviews.
+ */
+export function isSpacedReview(c: Candidate): boolean {
+  return c.source === "REVIEW_DUE" || c.source === "REVIEW_OVERDUE";
+}
+
 export function scoreCandidate(c: Candidate, mode: FocusMode): number {
   return (
     baseWeight(c) *
@@ -512,9 +521,9 @@ function carveFreeTime(
 // ---------- stage 4: placement ----------
 
 function batchReviews(candidates: Candidate[], maxBlockMinutes: number): Candidate[] {
-  const reviews = candidates.filter((c) => c.kind === "REVISION");
+  const reviews = candidates.filter(isSpacedReview);
   if (reviews.length === 0) return candidates;
-  const others = candidates.filter((c) => c.kind !== "REVISION");
+  const others = candidates.filter((c) => !isSpacedReview(c));
 
   // Reviews are short; context-switching costs more than the tasks themselves,
   // so they travel as one batch (chunked only when a batch outgrows a block).
@@ -561,9 +570,9 @@ function placeCandidates(
 
   // Reviews first, then everything else by score. Spaced repetition is the
   // spine of the app — it is never the thing that gets dropped.
-  const reviews = candidates.filter((c) => c.kind === "REVISION");
+  const reviews = candidates.filter(isSpacedReview);
   const rest = candidates
-    .filter((c) => c.kind !== "REVISION")
+    .filter((c) => !isSpacedReview(c))
     .sort(
       (a, b) =>
         scoreCandidate(b, settings.focusMode) -
@@ -578,7 +587,15 @@ function placeCandidates(
       if (slot.remaining < c.estimateMins) continue;
       // One kind per block: a block titled "revision" must not quietly contain
       // DSA problems, or its label and deep-link both lie.
-      if (slot.assigned.length > 0 && slot.assigned[0].kind !== c.kind) continue;
+      // ...and reviews never share a block with study tasks: the batch is a
+      // set of 4-minute recalls, a task is one long piece of work.
+      if (
+        slot.assigned.length > 0 &&
+        (slot.assigned[0].kind !== c.kind ||
+          isSpacedReview(slot.assigned[0]) !== isSpacedReview(c))
+      ) {
+        continue;
+      }
       // Never split one DSA problem across two blocks, and never let a block
       // stack up on a single pattern.
       if (
@@ -631,7 +648,7 @@ export function generatePlan(input: GeneratePlanInput): {
   const prepared = batchReviews(input.candidates, settings.maxBlockMinutes);
   const { overflow } = placeCandidates(slots, prepared, settings, wakeMin, bedMin);
 
-  if (overflow.some((c) => c.kind === "REVISION")) {
+  if (overflow.some(isSpacedReview)) {
     warnings.push(
       "Reviews do not fit in today's free time — consider a lighter focus mode or fewer new topics."
     );

@@ -493,3 +493,75 @@ describe("warnings", () => {
     expect(summary.warnings).toEqual([]);
   });
 });
+
+describe("study tasks vs spaced-repetition reviews", () => {
+  // Regression: a 90-minute study task (kind REVISION) used to be swallowed
+  // into the 4-minute review batch — renamed, shrunk, and unlinked from its task.
+  it("keeps a manual study task as its own block with its full time and task link", () => {
+    const { blocks } = run({
+      classSlots: [],
+      candidates: [
+        candidate({
+          id: "task:t1",
+          source: "MANUAL",
+          kind: "REVISION",
+          demand: "MEDIUM",
+          title: "Finish DAA assignment",
+          estimateMins: 90,
+          taskId: "t1",
+        }),
+      ],
+    });
+    const block = blocks.find((b) => b.taskIds.includes("t1"));
+    expect(block).toBeDefined();
+    expect(block!.title).toBe("Finish DAA assignment");
+    expect(minutes(block!)).toBe(90);
+  });
+
+  it("still batches real SM-2 reviews together", () => {
+    const reviews = [1, 2, 3].map((i) =>
+      candidate({
+        id: `topic:${i}`,
+        source: "REVIEW_DUE",
+        kind: "REVISION",
+        demand: "MEDIUM",
+        estimateMins: 4,
+        topicId: `topic-${i}`,
+      })
+    );
+    const study = candidate({
+      id: "task:s",
+      source: "MANUAL",
+      kind: "REVISION",
+      demand: "MEDIUM",
+      estimateMins: 60,
+      taskId: "s",
+    });
+    const { blocks } = run({ classSlots: [], candidates: [...reviews, study] });
+    const batch = blocks.find((b) => b.topicIds.length === 3);
+    expect(batch).toBeDefined();
+    expect(batch!.taskIds).toEqual([]);
+  });
+
+  it("never drops a review before a study task when time is short", () => {
+    const review = candidate({
+      id: "topic:1",
+      source: "REVIEW_OVERDUE",
+      kind: "REVISION",
+      demand: "MEDIUM",
+      estimateMins: 4,
+      topicId: "topic-1",
+      daysOverdue: 3,
+    });
+    const study = candidate({
+      id: "task:big",
+      source: "MANUAL",
+      kind: "REVISION",
+      demand: "MEDIUM",
+      estimateMins: 90,
+      taskId: "big",
+    });
+    const { summary } = run({ candidates: [study, review] });
+    expect(summary.overflow.some((c) => c.id === "topic:1")).toBe(false);
+  });
+});
