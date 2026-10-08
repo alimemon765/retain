@@ -8,6 +8,7 @@ import {
 } from "@/lib/queries-planner";
 import { DayView } from "@/components/planner/day-view";
 import { WeekView } from "@/components/planner/week-view";
+import { AssistantPanel } from "@/components/planner/assistant-panel";
 import { OverflowStrip } from "@/components/planner/overflow-strip";
 import { TasksPanel } from "@/components/planner/tasks-panel";
 import { prisma } from "@/lib/db";
@@ -66,6 +67,8 @@ export default async function PlannerPage({
           </Link>
         </div>
       </div>
+
+      <AssistantPanel />
 
       <WeekView date={date} />
 
