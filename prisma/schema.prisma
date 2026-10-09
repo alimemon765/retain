@@ -3,9 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider  = "postgresql"
   // Pooled connection (Supabase pgbouncer, port 6543) for the app…
-  url      = env("DATABASE_URL")
+  url       = env("DATABASE_URL")
   // …direct connection (port 5432) for migrations only.
   directUrl = env("DIRECT_URL")
 }
@@ -20,22 +20,22 @@ model Subject {
 }
 
 model Topic {
-  id           String     @id @default(cuid())
+  id           String      @id @default(cuid())
   subjectId    String
-  subject      Subject    @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  subject      Subject     @relation(fields: [subjectId], references: [id], onDelete: Cascade)
   name         String
   notes        String?
-  source       String     @default("SELF") // COLLEGE | SELF
+  source       String      @default("SELF") // COLLEGE | SELF
   dateStudied  DateTime
-  easeFactor   Float      @default(2.5)
-  intervalDays Int        @default(0)
-  repetitions  Int        @default(0)
+  easeFactor   Float       @default(2.5)
+  intervalDays Int         @default(0)
+  repetitions  Int         @default(0)
   nextReview   DateTime
-  status       String     @default("LEARNING") // LEARNING | REVIEWING | MASTERED | SUSPENDED
+  status       String      @default("LEARNING") // LEARNING | REVIEWING | MASTERED | SUSPENDED
   questions    Question[]
   reviews      Review[]
   highlights   Highlight[] // book highlights promoted into this topic
-  createdAt    DateTime   @default(now())
+  createdAt    DateTime    @default(now())
 }
 
 model Question {
@@ -186,25 +186,25 @@ model Evidence {
 // ---------- Phase 3: Day planner ----------
 
 model PlannerSettings {
-  id               String   @id @default("singleton")
-  wakeTime         String   @default("06:30") // local HH:mm
-  sleepHours       Float    @default(7.5)
-  preBufferMinutes Int      @default(60) // getting ready before leaving
-  travelMinutes    Int      @default(60) // each way
-  focusMode        String   @default("BALANCED") // BALANCED | EXAMS | CP | READING | SKILLS
-  minBlockMinutes  Int      @default(25)
-  maxBlockMinutes  Int      @default(90)
-  breakMinutes     Int      @default(10)
-  bufferPercent    Int      @default(20) // % of free time left deliberately unscheduled
-  mealBlocks       Json     @default("[]") // [{label,start,minutes}]
+  id               String    @id @default("singleton")
+  wakeTime         String    @default("06:30") // local HH:mm
+  sleepHours       Float     @default(7.5)
+  preBufferMinutes Int       @default(60) // getting ready before leaving
+  travelMinutes    Int       @default(60) // each way
+  focusMode        String    @default("BALANCED") // BALANCED | EXAMS | CP | READING | SKILLS
+  minBlockMinutes  Int       @default(25)
+  maxBlockMinutes  Int       @default(90)
+  breakMinutes     Int       @default(10)
+  bufferPercent    Int       @default(20) // % of free time left deliberately unscheduled
+  mealBlocks       Json      @default("[]") // [{label,start,minutes}]
   // Google Calendar is the output layer (widget + block-start notifications).
   gcalCalendarId   String?
   gcalRefreshToken String? // encrypted at rest with ENCRYPTION_KEY
-  gcalSyncClasses  Boolean  @default(true)
+  gcalSyncClasses  Boolean   @default(true)
   gcalLastSyncAt   DateTime?
   // Set when Google rejects the refresh token; drives the reconnect prompt.
-  gcalAuthExpired  Boolean  @default(false)
-  updatedAt        DateTime @updatedAt
+  gcalAuthExpired  Boolean   @default(false)
+  updatedAt        DateTime  @updatedAt
 }
 
 model ClassSlot {
@@ -233,34 +233,36 @@ model CalendarException {
 }
 
 model PlannedBlock {
-  id          String    @id @default(cuid())
-  date        DateTime // date-only
-  startTime   String // "16:30"
-  endTime     String
-  kind        String // SLEEP | GET_READY | TRAVEL | CLASS | MEAL | REVISION | DSA | READING | SKILL | CUSTOM | BREAK | BUFFER
-  title       String
+  id            String    @id @default(cuid())
+  date          DateTime // date-only
+  startTime     String // "16:30"
+  endTime       String
+  kind          String // SLEEP | GET_READY | TRAVEL | CLASS | MEAL | REVISION | DSA | READING | SKILL | CUSTOM | BREAK | BUFFER
+  title         String
   // Deep-link payload so a block can open the right Retain screen.
-  topicIds    String[]  @default([])
-  problemIds  String[]  @default([])
-  taskIds     String[]  @default([])
-  bookId      String?
-  skillId     String?
-  locked      Boolean   @default(false) // manually placed — regeneration must not move it
-  completed   Boolean   @default(false)
-  completedAt DateTime?
-  gcalEventId String?
-  createdAt   DateTime  @default(now())
+  topicIds      String[]  @default([])
+  problemIds    String[]  @default([])
+  taskIds       String[]  @default([])
+  bookId        String?
+  skillId       String?
+  locked        Boolean   @default(false) // manually placed — regeneration must not move it
+  completed     Boolean   @default(false)
+  completedAt   DateTime?
+  gcalEventId   String?
+  fromAssistant Boolean   @default(false) // placed by the planning assistant; a later run may replace it
+  createdAt     DateTime  @default(now())
 
   @@index([date])
 }
 
 model ManualTask {
-  id           String    @id @default(cuid())
-  title        String
-  estimateMins Int
-  kind         String // DSA | READING | SKILL | STUDY | ADMIN
-  dueDate      DateTime?
-  priority     Int       @default(3) // 1 highest .. 5 lowest
-  done         Boolean   @default(false)
-  createdAt    DateTime  @default(now())
+  id            String    @id @default(cuid())
+  title         String
+  estimateMins  Int
+  kind          String // DSA | READING | SKILL | STUDY | ADMIN
+  dueDate       DateTime?
+  priority      Int       @default(3) // 1 highest .. 5 lowest
+  done          Boolean   @default(false)
+  fromAssistant Boolean   @default(false) // created by the planning assistant; a later run may replace it
+  createdAt     DateTime  @default(now())
 }

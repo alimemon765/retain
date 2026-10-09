@@ -49,6 +49,13 @@ export interface DayPlanOptions {
   extraCandidates?: readonly Candidate[];
   extraLocked?: readonly PlannerBlock[];
   placedEarlier?: readonly PlacedRef[];
+  /** Earlier assistant work being replaced: plan as if it were already gone. */
+  ignore?: IgnoredWork;
+}
+
+export interface IgnoredWork {
+  taskIds: readonly string[];
+  blockIds: readonly string[];
 }
 
 export interface DayPlanResult {
@@ -99,23 +106,30 @@ async function candidatesFor(
   opts: DayPlanOptions
 ): Promise<Candidate[]> {
   const [due, elsewhere] = await Promise.all([gatherCandidates(date), placedElsewhere(date)]);
+  const ignoredTasks = new Set(opts.ignore?.taskIds ?? []);
   const covered = [
     ...existing.filter((b) => b.locked || b.completed),
     ...(opts.placedEarlier ?? []).map((p) => ({ ...p, bookId: null, skillId: null })),
   ];
   return [
-    ...excludePlaced(due, covered).filter((c) => !c.taskId || !elsewhere.has(c.taskId)),
+    ...excludePlaced(due, covered).filter(
+      (c) => !c.taskId || (!elsewhere.has(c.taskId) && !ignoredTasks.has(c.taskId))
+    ),
     ...(opts.extraCandidates ?? []),
   ];
 }
 
 export async function buildDayPlan(date: Date, opts: DayPlanOptions = {}): Promise<DayPlanResult> {
-  const [settings, classSlots, exceptionRows, existing] = await Promise.all([
+  const [settings, classSlots, exceptionRows, saved] = await Promise.all([
     getPlannerSettings(),
     getClassSlots(),
     getExceptions(date, date),
     getBlocksForDate(date),
   ]);
+
+  // Blocks being replaced still count as "removed" in the diff below.
+  const ignoredBlocks = new Set(opts.ignore?.blockIds ?? []);
+  const existing = saved.filter((b) => !ignoredBlocks.has(b.id));
 
   const exceptions: PlannerException[] = exceptionRows.map((e) => ({
     kind: e.kind as PlannerException["kind"],
@@ -134,11 +148,12 @@ export async function buildDayPlan(date: Date, opts: DayPlanOptions = {}): Promi
   });
 
   const before = new Set(existing.map(signature));
+  const replaced = saved.filter((b) => ignoredBlocks.has(b.id)).map(signature);
   const after = new Set(blocks.map(signature));
   const preview: PlanPreview = {
     blocks,
     added: blocks.filter((b) => !before.has(signature(b))).map(signature),
-    removed: existing.filter((b) => !after.has(signature(b))).map(signature),
+    removed: [...existing.filter((b) => !after.has(signature(b))).map(signature), ...replaced],
     kept: blocks.filter((b) => before.has(signature(b))).length,
     overflow: summary.overflow.map((c) => ({
       id: c.id,
@@ -176,7 +191,8 @@ export async function eventIdsToReplace(
 export async function replaceDayBlocks(
   tx: Prisma.TransactionClient,
   date: Date,
-  blocks: readonly PlannerBlock[]
+  blocks: readonly PlannerBlock[],
+  isAssistantBlock: (b: PlannerBlock) => boolean = () => false
 ): Promise<void> {
   await tx.plannedBlock.deleteMany({ where: { date, id: { notIn: keptIds(blocks) } } });
   await tx.plannedBlock.createMany({
@@ -194,6 +210,7 @@ export async function replaceDayBlocks(
         bookId: b.bookId ?? null,
         skillId: b.skillId ?? null,
         locked: b.locked,
+        fromAssistant: isAssistantBlock(b),
       })),
   });
 }

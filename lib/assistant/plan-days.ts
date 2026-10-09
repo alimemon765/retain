@@ -1,4 +1,4 @@
-import { buildDayPlan, type PlacedRef, type PlanPreview } from "../day-plan";
+import { buildDayPlan, type IgnoredWork, type PlacedRef, type PlanPreview } from "../day-plan";
 import type { FocusMode } from "../types";
 import { assignmentCandidate, fixedBlock, isoToDate } from "./blocks";
 import {
@@ -32,16 +32,22 @@ function placedFrom(preview: PlanPreview): PlacedRef {
   };
 }
 
+export interface PlanDaysOptions {
+  focusMode?: FocusMode;
+  ignore?: IgnoredWork;
+}
+
 /** How much new work each day can take once its own due work is placed. */
 async function measureCapacity(
   window: readonly string[],
-  focusMode?: FocusMode
+  { focusMode, ignore }: PlanDaysOptions
 ): Promise<DayCapacity[]> {
   const capacities: DayCapacity[] = [];
   const placed: PlacedRef[] = [];
   for (const iso of window) {
     const { preview, capacityMins } = await buildDayPlan(isoToDate(iso), {
       focusMode,
+      ignore,
       placedEarlier: placed,
     });
     capacities.push({ iso, capacityMins });
@@ -53,9 +59,9 @@ async function measureCapacity(
 export async function planDays(
   tasks: readonly AssistantTask[],
   window: readonly string[],
-  focusMode?: FocusMode
+  opts: PlanDaysOptions = {}
 ): Promise<MultiDayDraft> {
-  const capacities = await measureCapacity(window, focusMode);
+  const capacities = await measureCapacity(window, opts);
   const { assignments, overflow } = distributeTasks(tasks, capacities);
 
   const days: DayDraft[] = [];
@@ -63,7 +69,8 @@ export async function planDays(
   for (const iso of window) {
     const mine = assignments.filter((a) => a.iso === iso);
     const { preview } = await buildDayPlan(isoToDate(iso), {
-      focusMode,
+      focusMode: opts.focusMode,
+      ignore: opts.ignore,
       placedEarlier: placed,
       extraCandidates: mine.filter((a) => a.task.fixedStart === null).map(assignmentCandidate),
       extraLocked: mine.filter((a) => a.task.fixedStart !== null).map(fixedBlock),

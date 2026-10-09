@@ -18,7 +18,8 @@ import {
   planningWindow,
   remapTaskIds,
 } from "@/lib/assistant/blocks";
-import { eventIdsToReplace, replaceDayBlocks } from "@/lib/day-plan";
+import { eventIdsToReplace, replaceDayBlocks, type IgnoredWork } from "@/lib/day-plan";
+import { assistantBlockMarker } from "@/lib/assistant/replace";
 
 const COMMIT_TIMEOUT_MS = 20_000;
 
@@ -39,12 +40,47 @@ const ClientTasksSchema = z
 type Fail = { ok: false; error: string };
 
 export type AssistantDraftResult =
-  | { ok: true; window: string[]; tasks: AssistantTask[]; draft: MultiDayDraft; notes: string[] }
+  | {
+      ok: true;
+      window: string[];
+      tasks: AssistantTask[];
+      draft: MultiDayDraft;
+      notes: string[];
+      /** Unfinished tasks left by earlier assistant runs (replaceable). */
+      previousTasks: number;
+    }
   | Fail;
 
 export type AssistantCommitResult =
-  | { ok: true; daysPlanned: number; tasksCreated: number; synced: boolean }
+  | { ok: true; daysPlanned: number; tasksCreated: number; tasksReplaced: number; synced: boolean }
   | Fail;
+
+interface PreviousWork extends IgnoredWork {
+  eventIds: string[];
+}
+
+const NO_PREVIOUS: PreviousWork = { taskIds: [], blockIds: [], eventIds: [] };
+
+/** Unfinished work from earlier assistant runs: open tasks and their future blocks. */
+async function findPreviousWork(): Promise<PreviousWork> {
+  const tasks = await prisma.manualTask.findMany({
+    where: { fromAssistant: true, done: false },
+    select: { id: true },
+  });
+  const taskIds = tasks.map((t) => t.id);
+  const origin = taskIds.length
+    ? [{ fromAssistant: true }, { taskIds: { hasSome: taskIds } }]
+    : [{ fromAssistant: true }];
+  const blocks = await prisma.plannedBlock.findMany({
+    where: { date: { gte: today() }, completed: false, OR: origin },
+    select: { id: true, gcalEventId: true },
+  });
+  return {
+    taskIds,
+    blockIds: blocks.map((b) => b.id),
+    eventIds: blocks.flatMap((b) => (b.gcalEventId ? [b.gcalEventId] : [])),
+  };
+}
 
 function windowFor(dayCount: unknown): string[] {
   const count = clampDayCount(typeof dayCount === "number" ? dayCount : Number.NaN);
@@ -84,13 +120,23 @@ export async function parsePlanText(text: unknown, dayCount: unknown): Promise<E
 /** Step 2: lay the tasks out across the days. Writes nothing. */
 export async function previewAssistantPlan(
   tasks: unknown,
-  dayCount: unknown
+  dayCount: unknown,
+  replacePrevious: unknown = false
 ): Promise<AssistantDraftResult> {
   const window = windowFor(dayCount);
   const checked = await checkTasks(tasks, window);
   if (!checked) return { ok: false, error: "Those tasks didn't look right. Start over." };
-  const draft = await planDays(checked.tasks, window);
-  return { ok: true, window, tasks: checked.tasks, draft, notes: checked.notes };
+  const previous = await findPreviousWork();
+  const ignore = replacePrevious === true ? previous : undefined;
+  const draft = await planDays(checked.tasks, window, { ignore });
+  return {
+    ok: true,
+    window,
+    tasks: checked.tasks,
+    draft,
+    notes: checked.notes,
+    previousTasks: previous.taskIds.length,
+  };
 }
 
 /** Save each flexible task (including ones that didn't fit) so nothing is lost. */
@@ -118,6 +164,7 @@ async function saveTasks(
         kind: task.kind,
         priority: task.priority,
         dueDate: task.deadline ? isoToDate(task.deadline) : null,
+        fromAssistant: true,
       },
     });
     idMap.set(draftId, created.id);
@@ -139,10 +186,56 @@ async function trySync(window: string[]): Promise<boolean> {
   }
 }
 
+interface SavedPlan {
+  daysPlanned: number;
+  tasksCreated: number;
+  tasksReplaced: number;
+  staleEvents: string[];
+}
+
+/** Plan and save in one transaction: a failure changes nothing, so a retry can't duplicate. */
+async function savePlan(
+  tasks: AssistantTask[],
+  window: string[],
+  replacePrevious: boolean
+): Promise<SavedPlan> {
+  const previous = replacePrevious ? await findPreviousWork() : NO_PREVIOUS;
+  const draft = await planDays(tasks, window, { ignore: previous });
+  const days = draft.days.map((d) => ({
+    date: isoToDate(d.iso),
+    blocks: d.preview.blocks,
+    assignments: d.assignments,
+  }));
+  const dayEvents = await Promise.all(days.map((d) => eventIdsToReplace(d.date, d.blocks)));
+
+  const tasksCreated = await prisma.$transaction(
+    async (tx) => {
+      // The old run's leftovers go and the new plan arrives together.
+      await tx.plannedBlock.deleteMany({ where: { id: { in: [...previous.blockIds] } } });
+      await tx.manualTask.deleteMany({ where: { id: { in: [...previous.taskIds] }, done: false } });
+      const idMap = await saveTasks(tx, draft, tasks);
+      const savedIds = new Set(idMap.values());
+      for (const d of days) {
+        const isAssistant = assistantBlockMarker(d.assignments, savedIds);
+        await replaceDayBlocks(tx, d.date, remapTaskIds(d.blocks, idMap), isAssistant);
+      }
+      return idMap.size;
+    },
+    { timeout: COMMIT_TIMEOUT_MS }
+  );
+  return {
+    daysPlanned: draft.days.length,
+    tasksCreated,
+    tasksReplaced: previous.taskIds.length,
+    staleEvents: [...new Set([...dayEvents.flat(), ...previous.eventIds])],
+  };
+}
+
 /** Step 3: save the tasks and the timetable. Recomputed server-side, never trusted. */
 export async function commitAssistantPlan(
   tasks: unknown,
-  dayCount: unknown
+  dayCount: unknown,
+  replacePrevious: unknown = false
 ): Promise<AssistantCommitResult> {
   const window = windowFor(dayCount);
   const checked = await checkTasks(tasks, window);
@@ -150,32 +243,24 @@ export async function commitAssistantPlan(
     return { ok: false, error: "There's nothing to plan. Start over." };
   }
 
+  let saved: SavedPlan;
   try {
-    const draft = await planDays(checked.tasks, window);
-    const days = draft.days.map((d) => ({ date: isoToDate(d.iso), blocks: d.preview.blocks }));
-    const staleEvents = (
-      await Promise.all(days.map((d) => eventIdsToReplace(d.date, d.blocks)))
-    ).flat();
-
-    // All-or-nothing: tasks and every day's blocks commit together, so a
-    // failure can't leave half a plan behind or duplicate tasks on retry.
-    const tasksCreated = await prisma.$transaction(
-      async (tx) => {
-        const idMap = await saveTasks(tx, draft, checked.tasks);
-        for (const d of days) await replaceDayBlocks(tx, d.date, remapTaskIds(d.blocks, idMap));
-        return idMap.size;
-      },
-      { timeout: COMMIT_TIMEOUT_MS }
-    );
-
-    // Only once the new plan is safely saved do the old events go.
-    await deleteEvents(staleEvents);
-    const synced = await trySync(window);
-    revalidatePath("/planner");
-    revalidatePath("/");
-    return { ok: true, daysPlanned: draft.days.length, tasksCreated, synced };
+    saved = await savePlan(checked.tasks, window, replacePrevious === true);
   } catch (error) {
     console.error("[assistant] commit failed:", error instanceof Error ? error.message : error);
     return { ok: false, error: "Saving the plan failed, so nothing was changed. Try again." };
   }
+
+  // Saved. Everything below is best-effort and must not report a failure.
+  await deleteEvents(saved.staleEvents);
+  const synced = await trySync(window);
+  revalidatePath("/planner");
+  revalidatePath("/");
+  return {
+    ok: true,
+    daysPlanned: saved.daysPlanned,
+    tasksCreated: saved.tasksCreated,
+    tasksReplaced: saved.tasksReplaced,
+    synced,
+  };
 }

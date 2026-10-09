@@ -31,6 +31,7 @@ export function AssistantPanel() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<string | null>(null);
+  const [replace, setReplace] = useState(true);
 
   async function run<T>(label: string, fn: () => Promise<T>): Promise<T | null> {
     setBusy(label);
@@ -45,8 +46,14 @@ export function AssistantPanel() {
     }
   }
 
-  async function layOut(tasks: AssistantTask[], extraNotes: string[] = []) {
-    const result = await run("Laying out your days…", () => previewAssistantPlan(tasks, days));
+  async function layOut(
+    tasks: AssistantTask[],
+    extraNotes: string[] = [],
+    replacePrevious: boolean = replace
+  ) {
+    const result = await run("Laying out your days…", () =>
+      previewAssistantPlan(tasks, days, replacePrevious)
+    );
     if (!result) return;
     if (!result.ok) return setError(result.error);
     setDraft({ ...result, notes: [...extraNotes, ...result.notes] });
@@ -67,14 +74,22 @@ export function AssistantPanel() {
     if (draft) void layOut(change(draft.tasks));
   };
 
+  const toggleReplace = (next: boolean) => {
+    setReplace(next);
+    if (draft) void layOut(draft.tasks, [], next);
+  };
+
   async function commit() {
     if (!draft) return;
-    const result = await run("Saving your plan…", () => commitAssistantPlan(draft.tasks, days));
+    const result = await run("Saving your plan…", () =>
+      commitAssistantPlan(draft.tasks, days, replace)
+    );
     if (!result) return;
     if (!result.ok) return setError(result.error);
+    const plural = (n: number, word: string) => `${n} ${n === 1 ? word : `${word}s`}`;
     setSummary(
-      `Planned ${result.daysPlanned} ${result.daysPlanned === 1 ? "day" : "days"} and added ` +
-        `${result.tasksCreated} ${result.tasksCreated === 1 ? "task" : "tasks"}` +
+      `Planned ${plural(result.daysPlanned, "day")} and added ${plural(result.tasksCreated, "task")}` +
+        (result.tasksReplaced ? `, replacing ${plural(result.tasksReplaced, "old task")}` : "") +
         (result.synced ? ", and updated Google Calendar." : ".")
     );
     setStage("done");
@@ -135,6 +150,25 @@ export function AssistantPanel() {
           onDays={setDays}
           onSubmit={read}
         />
+      )}
+
+      {stage === "review" && draft && !busy && draft.previousTasks > 0 && (
+        <label className="flex items-start gap-2.5 rounded-lg bg-surface-2 px-3 py-2.5">
+          <input
+            type="checkbox"
+            checked={replace}
+            onChange={(e) => toggleReplace(e.target.checked)}
+            className="mt-0.5 h-4 w-4 accent-[var(--color-accent)]"
+          />
+          <span className="text-xs">
+            <span className="block text-foreground">Replace my last assistant plan</span>
+            <span className="block text-muted">
+              Removes {draft.previousTasks} unfinished{" "}
+              {draft.previousTasks === 1 ? "task" : "tasks"} it made before, and their blocks.
+              Your own tasks and anything ticked done stay.
+            </span>
+          </span>
+        </label>
       )}
 
       {stage === "review" && draft && !busy && (
