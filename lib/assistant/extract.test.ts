@@ -234,3 +234,20 @@ describe("extractTasks — errors from another copy of the SDK", () => {
     expect(result).toMatchObject({ ok: false, error: expect.stringMatching(/boom/) });
   });
 });
+
+describe("extractTasks — key hygiene", () => {
+  it("never shows an API key inside an error message", async () => {
+    const { client } = fakeClient(() => {
+      throw new Error('Headers.append: "x-api-key: sk-ant-api03-SECRETvalue_123" is invalid');
+    });
+    const result = await extractTasks("plan my week", CTX, client);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).not.toContain("SECRETvalue");
+  });
+
+  it("explains a key that was pasted with extra text around it", async () => {
+    process.env.ANTHROPIC_API_KEY = 'curl https://api.anthropic.com --header "x-api-key: sk-ant-x"';
+    const result = await extractTasks("plan my week", CTX);
+    expect(result).toMatchObject({ ok: false, error: expect.stringMatching(/only the key/i) });
+  });
+});

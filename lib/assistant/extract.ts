@@ -60,11 +60,25 @@ function buildUserMessage(text: string, ctx: ExtractContext): string {
   return `${lines.join("\n")}\n\n<plan>\n${safe}\n</plan>`;
 }
 
+const API_KEY_SHAPE = /^sk-ant-[A-Za-z0-9_-]+$/;
+const API_KEY_ANYWHERE = /sk-ant-[A-Za-z0-9_-]+/g;
+
+/** Hide anything key-shaped before it reaches a log or the screen. */
+function redactKeys(text: string): string {
+  return text.replace(API_KEY_ANYWHERE, "sk-ant-…(hidden)");
+}
+
+/** A key pasted with extra text (a curl example, quotes) fails every request. */
+function keyProblem(): string | null {
+  const key = process.env.ANTHROPIC_API_KEY?.trim();
+  if (!key || API_KEY_SHAPE.test(key)) return null;
+  return "ANTHROPIC_API_KEY on the server looks wrong: paste only the key (it starts with sk-ant-), with no spaces, quotes or other text, then redeploy.";
+}
+
 function defaultClient(): Anthropic | null {
-  const hasCredentials = Boolean(
-    process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN
-  );
-  return hasCredentials ? new Anthropic() : null;
+  const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
+  if (apiKey) return new Anthropic({ apiKey });
+  return process.env.ANTHROPIC_AUTH_TOKEN ? new Anthropic() : null;
 }
 
 const MAX_DETAIL_CHARS = 200;
@@ -82,7 +96,7 @@ function statusOf(error: unknown): number | undefined {
 
 function detailOf(error: unknown): string {
   const text = error instanceof Error ? error.message : String(error);
-  return text.slice(0, MAX_DETAIL_CHARS);
+  return redactKeys(text).slice(0, MAX_DETAIL_CHARS);
 }
 
 function describeError(error: unknown): string {
@@ -131,13 +145,16 @@ function readReply(content: readonly ReplyBlock[]): AssistantReply | null {
 export async function extractTasks(
   text: string,
   ctx: ExtractContext,
-  client: Anthropic | null = defaultClient()
+  injectedClient?: Anthropic | null
 ): Promise<ExtractResult> {
   const plan = text.trim();
   if (!plan) return fail("Write down what you want to get done first.");
   if (plan.length > MAX_INPUT_CHARS) {
     return fail(`That's too long. Keep it under ${MAX_INPUT_CHARS} characters.`);
   }
+  const badKey = injectedClient === undefined ? keyProblem() : null;
+  if (badKey) return fail(badKey);
+  const client = injectedClient === undefined ? defaultClient() : injectedClient;
   if (!client) {
     return fail(
       "The assistant isn't set up yet: add ANTHROPIC_API_KEY to the server environment."
@@ -180,7 +197,7 @@ export async function extractTasks(
     // Never log the plan text itself — only what failed.
     console.error(
       "[assistant] extract failed:",
-      error instanceof Error ? `${error.name}: ${error.message}` : error
+      redactKeys(error instanceof Error ? `${error.name}: ${error.message}` : String(error))
     );
     return fail(describeError(error));
   }
