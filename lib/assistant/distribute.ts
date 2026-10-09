@@ -93,6 +93,21 @@ function chooseDay(
   return iso ? { iso } : { reason: `No room in the next ${days.length} days.` };
 }
 
+export interface TimeBudget {
+  /** Minutes of work asked for, counting a daily item once per day. */
+  requestedMins: number;
+  /** Minutes the window's days can take after their own due work. */
+  freeMins: number;
+}
+
+/** Asked-for work against free time, so the student can see at once whether it fits. */
+export function timeBudget(tasks: readonly AssistantTask[], days: readonly DayCapacity[]): TimeBudget {
+  return {
+    requestedMins: expand(tasks, days).reduce((n, i) => n + i.task.estimateMins, 0),
+    freeMins: days.reduce((n, d) => n + Math.max(d.capacityMins, 0), 0),
+  };
+}
+
 export function distributeTasks(
   tasks: readonly AssistantTask[],
   days: readonly DayCapacity[]

@@ -3,9 +3,11 @@ import type { FocusMode } from "../types";
 import { assignmentCandidate, fixedBlock, isoToDate } from "./blocks";
 import {
   distributeTasks,
+  timeBudget,
   type Assignment,
   type DayCapacity,
   type OverflowItem,
+  type TimeBudget,
 } from "./distribute";
 import type { AssistantTask } from "./schema";
 
@@ -22,6 +24,7 @@ export interface DayDraft {
 export interface MultiDayDraft {
   days: DayDraft[];
   overflow: OverflowItem[];
+  budget: TimeBudget;
 }
 
 function placedFrom(preview: PlanPreview): PlacedRef {
@@ -78,5 +81,5 @@ export async function planDays(
     days.push({ iso, preview, assignments: mine });
     placed.push(placedFrom(preview));
   }
-  return { days, overflow };
+  return { days, overflow, budget: timeBudget(tasks, capacities) };
 }

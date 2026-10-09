@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { distributeTasks, type DayCapacity } from "./distribute";
+import { distributeTasks, timeBudget, type DayCapacity } from "./distribute";
 import type { AssistantTask } from "./schema";
 
 const D1 = "2026-10-08";
@@ -118,5 +118,21 @@ describe("distributeTasks", () => {
     const caps = Object.freeze(days(300).map((d) => Object.freeze(d)));
     expect(() => distributeTasks(tasks, caps)).not.toThrow();
     expect(caps[0].capacityMins).toBe(300);
+  });
+});
+
+describe("timeBudget", () => {
+  it("adds up the work asked for against the free time in the window", () => {
+    const budget = timeBudget([task("a", { estimateMins: 90 }), task("b", { estimateMins: 45 })], days(60, 120));
+    expect(budget).toEqual({ requestedMins: 135, freeMins: 180 });
+  });
+
+  it("counts a daily item once per day in the window", () => {
+    const gym = task("gym", { estimateMins: 60, fixedStart: "18:00", repeatDaily: true });
+    expect(timeBudget([gym], days(100, 100, 100)).requestedMins).toBe(180);
+  });
+
+  it("never reports negative free time", () => {
+    expect(timeBudget([], days(0, 0)).freeMins).toBe(0);
   });
 });

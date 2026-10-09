@@ -39,6 +39,8 @@ export function AssistantReview({ draft, busy, onMove, onRemove, onCommit, onEdi
         {draft.window.length === 1 ? "day" : "days"}. Nothing is saved until you confirm.
       </p>
 
+      <BudgetBar requestedMins={draft.draft.budget.requestedMins} freeMins={draft.draft.budget.freeMins} />
+
       {draft.notes.length > 0 && (
         <ul className="flex flex-col gap-1 rounded-lg bg-surface-2 px-3 py-2 text-xs text-muted">
           {draft.notes.map((n) => (
@@ -89,6 +91,31 @@ export function AssistantReview({ draft, busy, onMove, onRemove, onCommit, onEdi
           Edit text
         </button>
       </div>
+    </div>
+  );
+}
+
+function BudgetBar({ requestedMins, freeMins }: { requestedMins: number; freeMins: number }) {
+  const over = requestedMins - freeMins;
+  const fits = over <= 0;
+  const filled = freeMins > 0 ? Math.min(requestedMins / freeMins, 1) : 1;
+  return (
+    <div className="flex flex-col gap-1.5 rounded-lg bg-surface-2 px-3 py-2.5">
+      <p className="text-xs">
+        You asked for <span className="font-medium">{hours(requestedMins)}</span> of work · these days
+        have about <span className="font-medium">{hours(freeMins)}</span> free
+      </p>
+      <div className="h-1.5 overflow-hidden rounded-full bg-background" aria-hidden>
+        <div
+          className={`h-full rounded-full ${fits ? "bg-good" : "bg-again"}`}
+          style={{ width: `${Math.round(filled * 100)}%` }}
+        />
+      </div>
+      <p className={`text-[11px] ${fits ? "text-good" : "text-again"}`}>
+        {fits
+          ? `It fits, with ${hours(-over)} to spare.`
+          : `About ${hours(over)} won't fit. Remove or shorten tasks, plan more days, or free up time in setup.`}
+      </p>
     </div>
   );
 }
