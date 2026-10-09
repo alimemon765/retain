@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { format, parseISO } from "date-fns";
 import { normalizeTasks } from "./normalize";
+import type { z } from "zod";
 import { AssistantReplySchema, type AssistantTask } from "./schema";
 
 // The only place Retain talks to Claude: turn a free-text list of plans into
@@ -85,6 +86,29 @@ function describeError(error: unknown): string {
 
 const fail = (error: string): ExtractResult => ({ ok: false, error });
 
+type AssistantReply = z.infer<typeof AssistantReplySchema>;
+type ReplyBlock = { type: string; text?: string };
+
+const CODE_FENCE = /^```(?:json)?\s*|\s*```$/g;
+
+function parseJson(text: string): unknown {
+  try {
+    return JSON.parse(text.trim().replace(CODE_FENCE, ""));
+  } catch {
+    return undefined;
+  }
+}
+
+/** The first text block that holds a valid reply. Tolerant, and never throws. */
+function readReply(content: readonly ReplyBlock[]): AssistantReply | null {
+  for (const block of content) {
+    if (block.type !== "text" || typeof block.text !== "string") continue;
+    const parsed = AssistantReplySchema.safeParse(parseJson(block.text));
+    if (parsed.success) return parsed.data;
+  }
+  return null;
+}
+
 export async function extractTasks(
   text: string,
   ctx: ExtractContext,
@@ -102,7 +126,9 @@ export async function extractTasks(
   }
 
   try {
-    const response = await client.beta.messages.parse({
+    // create, not parse: the SDK's parse throws on any reply it can't read
+    // before the stop reason can be checked, so we read the reply ourselves.
+    const response = await client.beta.messages.create({
       model: ASSISTANT_MODEL,
       max_tokens: MAX_OUTPUT_TOKENS,
       betas: [FALLBACK_BETA],
@@ -119,14 +145,24 @@ export async function extractTasks(
     if (response.stop_reason === "max_tokens") {
       return fail("That plan was too long to read in one go. Try splitting it up.");
     }
-    const reply = response.parsed_output;
-    if (!reply) return fail("The assistant's reply couldn't be read. Try again.");
+    const reply = readReply(response.content);
+    if (!reply) {
+      // Shape only — never the reply text, which echoes the user's plan.
+      console.error("[assistant] unreadable reply:", {
+        stopReason: response.stop_reason,
+        blocks: response.content.map((b) => b.type),
+      });
+      return fail("The assistant's reply couldn't be read. Try again.");
+    }
 
     const { tasks, notes } = normalizeTasks(reply.tasks, ctx);
     return { ok: true, tasks, notes: [...reply.notes, ...notes] };
   } catch (error) {
     // Never log the plan text itself — only what failed.
-    console.error("[assistant] extract failed:", error instanceof Error ? error.message : error);
+    console.error(
+      "[assistant] extract failed:",
+      error instanceof Error ? `${error.name}: ${error.message}` : error
+    );
     return fail(describeError(error));
   }
 }
