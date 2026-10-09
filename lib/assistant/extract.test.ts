@@ -209,3 +209,28 @@ describe("extractTasks — reading the reply", () => {
     expect(result).toMatchObject({ ok: false, error: expect.stringMatching(/too long/) });
   });
 });
+
+describe("extractTasks — errors from another copy of the SDK", () => {
+  // Bundlers can load the SDK twice, so instanceof checks fail; status still works.
+  const apiLike = (status: number, msg: string) => Object.assign(new Error(msg), { status });
+
+  it("names a rejected key by status code alone", async () => {
+    const { client } = fakeClient(() => { throw apiLike(401, "401 invalid x-api-key"); });
+    const result = await extractTasks("plan my week", CTX, client);
+    if (!result.ok) expect(result.error).toMatch(/key/i);
+  });
+
+  it("shows Anthropic's own reason for a rejected request", async () => {
+    const { client } = fakeClient(() => {
+      throw apiLike(400, "400 Your credit balance is too low to access the Anthropic API.");
+    });
+    const result = await extractTasks("plan my week", CTX, client);
+    expect(result).toMatchObject({ ok: false, error: expect.stringMatching(/credit balance is too low/) });
+  });
+
+  it("includes the reason for an unexpected failure", async () => {
+    const { client } = fakeClient(() => { throw new Error("boom"); });
+    const result = await extractTasks("plan my week", CTX, client);
+    expect(result).toMatchObject({ ok: false, error: expect.stringMatching(/boom/) });
+  });
+});

@@ -67,21 +67,40 @@ function defaultClient(): Anthropic | null {
   return hasCredentials ? new Anthropic() : null;
 }
 
-/** Most specific first: connection errors are also APIErrors. */
+const MAX_DETAIL_CHARS = 200;
+const HTTP_UNAUTHORIZED = 401;
+const HTTP_FORBIDDEN = 403;
+const HTTP_RATE_LIMITED = 429;
+const HTTP_SERVER_ERROR = 500;
+
+/** HTTP status of an API error. Duck-typed: a bundler may load a second copy
+ * of the SDK, and then instanceof checks against these classes fail. */
+function statusOf(error: unknown): number | undefined {
+  const status = (error as { status?: unknown } | null)?.status;
+  return typeof status === "number" ? status : undefined;
+}
+
+function detailOf(error: unknown): string {
+  const text = error instanceof Error ? error.message : String(error);
+  return text.slice(0, MAX_DETAIL_CHARS);
+}
+
 function describeError(error: unknown): string {
-  if (error instanceof Anthropic.AuthenticationError) {
+  const status = statusOf(error);
+  if (status === HTTP_UNAUTHORIZED || status === HTTP_FORBIDDEN) {
     return "Anthropic rejected the API key. Check ANTHROPIC_API_KEY on the server.";
   }
-  if (error instanceof Anthropic.RateLimitError) {
+  if (status === HTTP_RATE_LIMITED) {
     return "The assistant is busy right now. Try again in a minute.";
   }
-  if (error instanceof Anthropic.APIConnectionError) {
+  if (status !== undefined && status >= HTTP_SERVER_ERROR) {
+    return "Claude is overloaded right now. Try again in a minute.";
+  }
+  if (status === undefined && error instanceof Anthropic.APIConnectionError) {
     return "Couldn't connect to the assistant. Check your connection and try again.";
   }
-  if (error instanceof Anthropic.APIError) {
-    return "The assistant hit a problem reading that. Try again shortly.";
-  }
-  return "Something went wrong reading your plan. Try again.";
+  // Single-user app: showing the reason to its owner beats a vague message.
+  return `The assistant hit a problem: ${detailOf(error)}`;
 }
 
 const fail = (error: string): ExtractResult => ({ ok: false, error });
